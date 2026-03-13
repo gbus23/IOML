@@ -1,0 +1,835 @@
+\documentclass[a4paper,10pt,titlepage,leqno]{article}
+
+% ── Encodage & langue ──
+\usepackage[french]{babel}
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+
+% ── Mise en page ──
+\usepackage[margin=2.4cm, top=2.8cm, bottom=2.8cm]{geometry}
+\usepackage{parskip}
+\setlength{\parskip}{0.45em}
+
+% ── Mathématiques ──
+\usepackage{amsmath,amssymb,amsthm}
+\newtheorem{proposition}{Proposition}
+\newtheorem{definition}{Définition}
+
+% ── Tableaux & figures ──
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{subcaption}
+\usepackage{multirow}
+\usepackage{array}
+
+% ── Couleurs & encadrés ──
+\usepackage[dvipsnames,table]{xcolor}
+\usepackage[most]{tcolorbox}
+
+\definecolor{navydark}{HTML}{1B2A4A}
+\definecolor{navymid}{HTML}{2B4C7E}
+\definecolor{navylight}{HTML}{E8EEF4}
+\definecolor{navypale}{HTML}{F0F4F8}
+\definecolor{navyaccent}{HTML}{3D6098}
+
+\newtcolorbox{theorybox}[1][]{
+  colback=navylight, colframe=navydark,
+  fonttitle=\bfseries\color{white}, title={#1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  coltitle=white, colbacktitle=navydark
+}
+
+\newtcolorbox{resultbox}[1][]{
+  colback=navypale, colframe=navyaccent,
+  fonttitle=\bfseries\color{white}, title={#1},
+  boxrule=0.8pt, arc=3pt, left=6pt, right=6pt, top=4pt, bottom=4pt,
+  coltitle=white, colbacktitle=navyaccent
+}
+
+% ── Divers ──
+\usepackage{hyperref}
+\hypersetup{colorlinks=true, linkcolor=navydark, citecolor=navydark, urlcolor=navymid}
+\usepackage{tikz}
+\usetikzlibrary{positioning,shapes.geometric,arrows.meta}
+\usepackage{enumitem}
+\setlist{nosep, leftmargin=1.4em}
+\usepackage{titlesec}
+\titleformat{\section}{\Large\bfseries\color{navydark}}{\thesection}{0.7em}{}
+\titleformat{\subsection}{\large\bfseries\color{navymid}}{\thesubsection}{0.6em}{}
+\titleformat{\subsubsection}{\normalsize\bfseries\color{navyaccent}}{\thesubsubsection}{0.5em}{}
+
+% ── En-tête & pied de page (page de garde) ──
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\rhead{Octobre 2025}
+\chead{5OD21 Optimisation Discrète}
+\lhead{Selim-Antoine Lali, Gabriel Bus}
+\cfoot{Page \thepage}
+
+% ══════════════════════════════════════════════════════════════════════════
+\title{\vspace{-1cm}\textbf{Arbres de décision optimaux par programmation linéaire en nombres entiers}\\[0.3em]
+\large Égalités valides, équité, features dérivées et formulation binaire}
+\author{Gabriel Bus\\[0.5em]\normalsize Projet d'optimisation en nombres entiers -- ENSTA Paris}
+\date{Mars 2026}
+
+\begin{document}
+\makeatletter
+\begin{titlepage}
+  \null\vfill
+  \begin{center}
+    % Logo ENSTA Paris -- placer le fichier logo.png dans doc/
+    \includegraphics[width=0.35\textwidth]{logo.png}\\[2cm]
+    \LARGE\bfseries\@title\par
+    \vspace{1.5cm}
+    \large\@author\par
+    \vspace{0.8cm}
+    \normalsize\@date\par
+  \end{center}
+  \vfill\null
+\end{titlepage}
+\makeatother
+\thispagestyle{empty}
+\newpage
+\setcounter{page}{1}
+
+% ── Abstract ──
+\begin{abstract}
+Ce rapport présente quatre extensions d'un modèle MIP pour la construction d'arbres de décision optimaux.
+La \textbf{Partie~1} exploite les égalités valides (linked sets et opposite box corners) pour renforcer la relaxation linéaire et accélérer le branch-and-bound.
+La \textbf{Partie~2} intègre des contraintes d'équité (parité démographique, equal opportunity) et étudie le compromis équité--précision.
+La \textbf{Partie~3} propose un algorithme de génération de features dérivées (ratios, différences, produits) sélectionnées par gain de Gini.
+La \textbf{Partie~4} implémente la formulation univariée pour jeux de données binaires, son renforcement par Equivalent Sets et des bornes alternatives sur les variables~$\theta$.
+Les expériences sont menées sur cinq jeux de données~: \texttt{iris}, \texttt{seeds}, \texttt{wine} (fournis), \texttt{glass} et \texttt{ecoli} (UCI), avec des profondeurs $D\in\{2,3\}$.
+\end{abstract}
+
+\tableofcontents
+\vspace{0.8em}
+
+% ══════════════════════════════════════════════════════════════════════════
+\section{Partie 1 -- Égalités valides et cutting planes}
+\label{sec:part1}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Méthode}
+
+On travaille en arbres univariés avec un modèle à \emph{flux unitaire} : chaque échantillon~$i$ envoie exactement une unité de flot vers une feuille ($\sum_{t \in \mathcal{L}} u^i_{t,w} = 1$). L'objectif est de maximiser le nombre de bien classés. Pour renforcer la relaxation linéaire, on ajoute des \textbf{égalités valides} détectées automatiquement sur les données d'entraînement, puis on résout le MIP.
+
+Deux familles d'égalités sont exploitées :
+
+\begin{enumerate}
+  \item \textbf{Linked sets} (Section~4 du cours) : triplets $(P, Q, \bar{j})$ tels que $|P|=|Q|$ et les points de $P$ et $Q$ coïncident sur toutes les features sauf $\bar{j}$, avec un cycle sur $\bar{j}$.
+  \item \textbf{Opposite box corners} : paires de coins opposés d'une boîte $B(p^-, p^+)$ dans l'espace des features.
+\end{enumerate}
+
+Un algorithme de \textbf{cutting plane} résout d'abord la relaxation LP, ajoute uniquement les égalités violées, et répète jusqu'à convergence avant de résoudre le MIP complet. Un mécanisme d'\textbf{arrondi} des features à $k$ décimales augmente le nombre d'égalités détectables.
+
+\subsection{Questions théoriques}
+
+\begin{theorybox}[Définition et proposition : linked sets]
+
+\begin{definition}[Linked set]
+Soit $\mathcal{J}$ l'ensemble des features et $\mathcal{I}$ l'ensemble des échantillons. Un \textbf{linked set} est un triplet $(P, Q, \bar{j})$ où $\bar{j} \in \mathcal{J}$ est une feature distinguée et $P = \{p_1, \ldots, p_{n_s}\}$, $Q = \{q_1, \ldots, q_{n_s}\}$ sont deux sous-ensembles de $\mathcal{I}$ de même cardinal $n_s$ vérifiant~:
+\begin{enumerate}[label=(\roman*)]
+  \item \textbf{Coïncidence hors $\bar{j}$} : $x_{p_k, j} = x_{q_k, j}$ pour tout $k \in \{1, \ldots, n_s\}$ et tout $j \in \mathcal{J} \setminus \{\bar{j}\}$.
+  \item \textbf{Cycle sur $\bar{j}$} : $x_{q_k, \bar{j}} = x_{p_{k+1}, \bar{j}}$ pour tout $k \in \{1, \ldots, n_s\}$, avec la convention circulaire $p_{n_s+1} \triangleq p_1$.
+\end{enumerate}
+La condition~(i) signifie que $p_k$ et $q_k$ sont ``jumeaux'' sur toutes les features sauf $\bar{j}$. La condition~(ii) chaîne les valeurs de $\bar{j}$ en un cycle~: la valeur de $q_k$ sur $\bar{j}$ est celle de $p_{k+1}$, et celle de $q_{n_s}$ boucle sur $p_1$.
+\end{definition}
+
+\begin{proposition}
+Pour chaque linked set $(P, Q, \bar{j})$, l'égalité suivante est valide pour toute solution réalisable du modèle à flux unitaire~:
+\begin{equation}
+  \sum_{\ell \in \mathcal{L}} \sum_{k=1}^{n_s} \bigl( u_{\ell,w}^{p_k} - u_{\ell,w}^{q_k} \bigr) = 0.
+  \label{eq:linked}
+\end{equation}
+\end{proposition}
+
+\begin{proof}
+Dans le modèle à flux unitaire, chaque échantillon~$i$ envoie exactement une unité de flot vers une unique feuille~:
+\[
+  \forall\, i \in \mathcal{I}, \qquad \sum_{\ell \in \mathcal{L}} u_{\ell,w}^{i} = 1.
+\]
+Considérons un indice $k \in \{1, \ldots, n_s\}$ quelconque. En appliquant cette contrainte successivement à $p_k$ et $q_k$, on obtient~:
+\[
+  \sum_{\ell \in \mathcal{L}} u_{\ell,w}^{p_k} = 1 \qquad \text{et} \qquad \sum_{\ell \in \mathcal{L}} u_{\ell,w}^{q_k} = 1,
+\]
+d'où $\sum_{\ell \in \mathcal{L}} \bigl( u_{\ell,w}^{p_k} - u_{\ell,w}^{q_k} \bigr) = 1 - 1 = 0$.
+
+Ce résultat est valable pour \emph{chaque} $k$ individuellement, indépendamment de la structure de linked set. En sommant sur $k = 1, \ldots, n_s$~:
+\[
+  \sum_{\ell \in \mathcal{L}} \sum_{k=1}^{n_s} \bigl( u_{\ell,w}^{p_k} - u_{\ell,w}^{q_k} \bigr) = \sum_{k=1}^{n_s} 0 = 0.
+\]
+
+\textbf{Remarque.} La structure de linked set (conditions (i) et (ii)) n'est pas nécessaire pour la validité de l'égalité~\eqref{eq:linked} au niveau entier --- la contrainte de flux unitaire suffit. Cependant, la structure de linked set garantit que cette égalité est \emph{utile} au niveau de la relaxation LP~: les conditions de coïncidence et de cycle font que les solutions fractionnaires du LP peuvent violer~\eqref{eq:linked}, ce qui en fait un plan coupant efficace. \qedhere
+\end{proof}
+\end{theorybox}
+
+\begin{theorybox}[Définition et proposition : opposite box corners]
+
+\begin{definition}[Boîte et coins opposés]
+Une \textbf{boîte} $B(p^-, p^+) \subset \mathbb{R}^{|\mathcal{J}|}$ est définie par deux vecteurs $p^-, p^+ \in \mathbb{R}^{|\mathcal{J}|}$ avec $p^-_j \leq p^+_j$ pour tout $j$~:
+\[
+  B(p^-, p^+) = \bigl\{ v \in \mathbb{R}^{|\mathcal{J}|} \;\big|\; p^-_j \leq v_j \leq p^+_j, \;\forall\, j \in \mathcal{J} \bigr\}.
+\]
+Deux points $i_a, i_b$ de cette boîte sont des \textbf{coins opposés} si, pour chaque dimension $j$, l'un vaut $p^-_j$ et l'autre $p^+_j$~: $\{x_{i_a, j}, x_{i_b, j}\} = \{p^-_j, p^+_j\}$ pour tout $j \in \mathcal{J}$.
+\end{definition}
+
+\begin{proposition}
+Sous flux unitaire, pour deux paires distinctes de coins opposés $(i_1,i_2)$ et $(i_3,i_4)$ d'une même boîte $B(p^-, p^+)$, l'égalité
+\[
+u^{i_1}_{r,\ell(r)} + u^{i_2}_{r,\ell(r)} = u^{i_3}_{r,\ell(r)} + u^{i_4}_{r,\ell(r)}
+\]
+est valide dans le modèle univarié, où $r$ désigne la racine et $\ell(r) = 2r$ son fils gauche.
+\end{proposition}
+
+\begin{proof}
+Dans le modèle univarié, la racine $r$ branche sur une unique feature $\bar{j} \in \mathcal{J}$ avec un seuil $b_r$. Un point $i$ est envoyé vers le fils gauche $\ell(r)$ (i.e.\ $u^i_{r,\ell(r)} = 1$) si et seulement si $x_{i,\bar{j}} + \mu^- \leq b_r$, où $\mu^- = \min_j \mu_j$ est la constante de marge du modèle. Sinon, $u^i_{r,\ell(r)} = 0$ (le point va à droite).
+
+Puisque $i_1, i_2, i_3, i_4$ sont des coins de la boîte $B(p^-, p^+)$, leurs coordonnées sur $\bar{j}$ ne prennent que deux valeurs~: $p^-_{\bar{j}}$ et $p^+_{\bar{j}}$ (avec $p^-_{\bar{j}} \leq p^+_{\bar{j}}$). On distingue trois cas selon la position du seuil~:
+
+\begin{enumerate}[leftmargin=2em]
+  \item \textbf{Cas $b_r < p^-_{\bar{j}} + \mu^-$.} Aucun point ne satisfait $x_{i,\bar{j}} + \mu^- \leq b_r$, car $x_{i,\bar{j}} \geq p^-_{\bar{j}}$ pour tout coin. Donc $u^i_{r,\ell(r)} = 0$ pour $i \in \{i_1, i_2, i_3, i_4\}$, et les deux membres valent $0 + 0 = 0$.
+
+  \item \textbf{Cas $p^-_{\bar{j}} + \mu^- \leq b_r \leq p^+_{\bar{j}} + \mu^-$.} Le seuil sépare les deux valeurs~: les points avec $x_{i,\bar{j}} = p^-_{\bar{j}}$ vont à gauche ($u = 1$) et ceux avec $x_{i,\bar{j}} = p^+_{\bar{j}}$ vont à droite ($u = 0$). Or, dans chaque paire de coins opposés, par définition, exactement un point a $x_{i,\bar{j}} = p^-_{\bar{j}}$ et l'autre a $x_{i,\bar{j}} = p^+_{\bar{j}}$. Donc chaque membre vaut $1 + 0 = 1$.
+
+  \item \textbf{Cas $b_r > p^+_{\bar{j}} + \mu^-$.} Tous les points satisfont $x_{i,\bar{j}} + \mu^- \leq b_r$, donc $u^i_{r,\ell(r)} = 1$ pour tout~$i$. Les deux membres valent $1 + 1 = 2$.
+\end{enumerate}
+
+Dans les trois cas, le membre gauche est égal au membre droit. L'égalité est donc valide pour toute solution entière réalisable du modèle univarié avec flux unitaire.
+
+\textbf{Remarque.} Comme pour les linked sets, l'intérêt de cette égalité réside dans son effet sur la relaxation LP~: les coins opposés d'une même boîte ont des positions symétriques par rapport au seuil de branchement, ce qui force la relaxation fractionnaire à respecter cette symétrie. Plus il y a de paires de coins opposés dans les données (favorisé par l'arrondi), plus le polytope de la relaxation est resserré. \qedhere
+\end{proof}
+\end{theorybox}
+
+\begin{figure}[H]
+\centering
+\begin{tikzpicture}[scale=1.1]
+  \draw[thick, fill=gray!5] (0,0) rectangle (4,3);
+  \node at (2,1.5) {\small $B(p^-, p^+)$};
+  \fill[navydark] (0,0) circle (3pt) node[below left] {\small $i_1$};
+  \fill[navydark] (4,3) circle (3pt) node[above right] {\small $i_2$};
+  \draw[navydark, thick, dashed] (0,0) -- (4,3);
+  \fill[navyaccent] (0,3) circle (3pt) node[above left] {\small $i_3$};
+  \fill[navyaccent] (4,0) circle (3pt) node[below right] {\small $i_4$};
+  \draw[navyaccent, thick, dashed] (0,3) -- (4,0);
+\end{tikzpicture}
+\caption{Boîte 2D avec deux paires de coins opposés $(i_1,i_2)$ en bleu foncé et $(i_3,i_4)$ en bleu clair.}
+\label{fig:box}
+\end{figure}
+
+\subsection{Résultats expérimentaux}
+
+\paragraph{Protocole.} Cinq jeux de données~: \texttt{iris} (4~features, 120/30 train/test), \texttt{seeds} (6~features, 168/42), \texttt{wine} (13~features, 142/36), \texttt{glass} (9~features, classification de types de verre), \texttt{ecoli} (7~features, localisation de protéines). Données normalisées dans $[0,1]$. Profondeurs $D \in \{2,3\}$. Limite de temps : 60~s. On compare la résolution \emph{sans} et \emph{avec} égalités (linked sets + opposite box corners), avec différents niveaux d'arrondi (aucun, 1, 2 décimales).
+
+\begin{table}[H]
+\centering
+\caption{Résultats sans arrondi, $D=2$ : temps, nœuds B\&B et erreurs (source : \texttt{part1\_results\_v3.csv}). $^\ast$Time limit (60\,s) atteint pour glass, gap $\approx$ 20--27\,\%.}
+\label{tab:part1}
+\small
+\begin{tabular}{@{}l cc cc cc@{}}
+\toprule
+ & \multicolumn{2}{c}{\textbf{Temps (s)}} & \multicolumn{2}{c}{\textbf{Nœuds B\&B}} & \multicolumn{2}{c}{\textbf{Err.\ test}} \\
+\cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
+Dataset & Sans & Avec & Sans & Avec & Sans & Avec \\
+\midrule
+iris   & 6{,}1  & 4{,}8  & 1389  & 1187  & 1 & 1 \\
+seeds  & 55{,}8 & 49{,}8 & 14464 & 14462 & 3 & 3 \\
+wine   & 54{,}0 & 55{,}4 & 17752 & 17737 & 2 & 2 \\
+glass  & 60{,}1$^\ast$ & 60{,}1$^\ast$ & 21635 & 21010 & 16 & 16 \\
+ecoli  & 21{,}6 & 19{,}8 & 4797  & 4797  & 6 & 6 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part1_time_comparison.png}
+  \caption{Temps de résolution.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part1_nodes_comparison.png}
+  \caption{Nœuds de branch-and-bound.}
+\end{subfigure}
+\caption{Comparaison avec/sans égalités (sans arrondi) pour chaque dataset et profondeur.}
+\label{fig:part1_comparison}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.65\textwidth]{figures/part1_equalities_by_rounding.png}
+\caption{Nombre d'égalités détectées selon le niveau d'arrondi ($D=2$, config avec égalités).}
+\label{fig:part1_rounding}
+\end{figure}
+
+\subsection{Analyse}
+
+\begin{resultbox}[Observations clés -- Partie 1]
+\begin{itemize}
+  \item \textbf{Iris} : 285 égalités sans arrondi (2952 avec 1~décimale). À $D=3$, le temps passe de 52\,s à 20\,s avec égalités, et les nœuds B\&B de 5282 à 3254. Gain net.
+  \item \textbf{Seeds} : aucune égalité sans arrondi ; 1047 avec 1 décimale. Temps légèrement meilleur avec égalités à $D=2$ (50\,s vs 56\,s). À $D=3$, les deux configs atteignent le time limit.
+  \item \textbf{Wine} : aucune égalité sans arrondi. Temps et erreurs similaires avec ou sans égalités ; à $D=3$, time limit atteint pour les deux.
+  \item \textbf{Glass} (9~features, 171 train, 43 test) : 11 égalités sans arrondi, 36 avec 1 décimale. Time limit atteint à $D=2$ (gap $\approx$ 20--27\,\%) ; les égalités réduisent légèrement les nœuds B\&B (21010 vs 21635). Erreurs test identiques (16) avec ou sans égalités.
+  \item \textbf{Ecoli} (7~features, 217 train, 55 test) : aucune égalité sans arrondi, 2 avec 1 décimale. Temps légèrement meilleur avec égalités à $D=2$ (19{,}8\,s vs 21{,}6\,s). Nœuds identiques (4797) ; erreurs test 6 dans les deux cas.
+  \item L'arrondi augmente les égalités mais peut dégrader la solution (ex. seeds à 1 décimale : 16 err. train vs 10 sans arrondi).
+  \item La \textbf{précision} reste identique ou très proche sur les cinq jeux quand l'optimal est atteint, confirmant que les égalités ne modifient pas l'ensemble des solutions entières réalisables.
+\end{itemize}
+\end{resultbox}
+
+% ══════════════════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════════════════════
+\section{Partie 2 -- Arbres de décision équitables}
+\label{sec:part2}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Méthode}
+
+On augmente le modèle MIP (flux unitaire) avec des contraintes d'équité. Chaque échantillon possède un \textbf{attribut sensible} binaire $g(i) \in \{A, B\}$, et on fixe une classe positive $k_{\text{pos}}$. Deux critères sont considérés :
+
+\begin{itemize}
+  \item \textbf{Parité démographique} : $P(\hat{y}{=}\text{pos} \mid A) = P(\hat{y}{=}\text{pos} \mid B)$.
+  \item \textbf{Equal opportunity} : $\text{TPR}_A = \text{TPR}_B$ (taux de vrais positifs égal entre groupes).
+\end{itemize}
+
+\paragraph{Linéarisation.} L'indicatrice $\text{pred}_i = \sum_{t \in \mathcal{L}} u^i_{t,w} \cdot c_{k_{\text{pos}}, t}$ est un produit de variables binaires. On introduit $w_{i,t} \in \{0,1\}$ avec :
+\begin{equation}
+w_{i,t} \leq u^i_{t,w}, \quad w_{i,t} \leq c_{k_{\text{pos}}, t}, \quad w_{i,t} \geq u^i_{t,w} + c_{k_{\text{pos}}, t} - 1.
+\label{eq:linfair}
+\end{equation}
+
+Le taux de prédiction positive dans chaque groupe s'exprime alors comme $r_g = \frac{1}{|g|} \sum_{i \in g} \sum_t w_{i,t}$.
+
+\begin{theorybox}[Validité de la linéarisation]
+
+Les trois inégalités~\eqref{eq:linfair} forment une linéarisation exacte du produit $u^i_{t,w} \cdot c_{k_{\text{pos}}, t}$ de deux variables binaires. Montrons que $w_{i,t} = u^i_{t,w} \cdot c_{k_{\text{pos}}, t}$ pour toute solution entière~:
+
+\begin{itemize}
+  \item Si $u^i_{t,w} = 0$ : les deux premières inégalités donnent $w_{i,t} \leq 0$, donc $w_{i,t} = 0 = 0 \cdot c_{k_{\text{pos}}, t}$.
+  \item Si $c_{k_{\text{pos}}, t} = 0$ : la deuxième inégalité donne $w_{i,t} \leq 0$, donc $w_{i,t} = 0 = u^i_{t,w} \cdot 0$.
+  \item Si $u^i_{t,w} = 1$ et $c_{k_{\text{pos}}, t} = 1$ : la troisième inégalité donne $w_{i,t} \geq 1 + 1 - 1 = 1$, donc $w_{i,t} = 1 = 1 \cdot 1$.
+\end{itemize}
+
+La contrainte de parité~\eqref{eq:constraint} (ou sa version avec tolérance) est donc bien équivalente à l'égalité des taux de prédiction positive entre groupes pour toute solution entière.
+\end{theorybox}
+
+\paragraph{Configurations testées.}
+
+\begin{enumerate}
+  \item \textbf{Contrainte stricte} : $r_A = r_B$, linéarisée par mise au même dénominateur~:
+  \begin{equation}
+    n_B \sum_{i \in A} \sum_{t \in \mathcal{L}} w_{i,t} \;=\; n_A \sum_{i \in B} \sum_{t \in \mathcal{L}} w_{i,t}.
+    \label{eq:constraint}
+  \end{equation}
+  \item \textbf{Tolérance} : $|r_A - r_B| \leq \varepsilon$ avec $\varepsilon = 0{,}15$, modélisée via deux variables de slack $s^+, s^- \geq 0$ telles que $r_A - r_B = s^+ - s^-$ et $s^+ + s^- \leq \varepsilon$.
+  \item \textbf{Pénalité} : objectif $\max(\text{accuracy} - \lambda (s^+ + s^-))$ avec $\lambda = 80$, qui favorise l'équité sans la forcer strictement.
+\end{enumerate}
+
+\subsection{Résultats expérimentaux}
+
+\paragraph{Protocole.} Cinq jeux de données (iris, seeds, wine, glass, ecoli). Groupe sensible synthétique : médiane de la première feature. Quatre configurations comparées à $D \in \{2,3\}$, limite 60\,s.
+
+\begin{table}[H]
+\centering
+\caption{Partie 2 -- Compromis équité-précision (parité démographique, $D=2$).}
+\label{tab:part2}
+\small
+\begin{tabular}{@{}l l r r r r@{}}
+\toprule
+Dataset & Configuration & Temps (s) & Err.\ train & Err.\ test & Parity gap \\
+\midrule
+\multirow{4}{*}{iris}
+ & Sans équité        & 2{,}8  & 5  & 1  & 0{,}70 \\
+ & Contrainte stricte & 10{,}5 & 43 & 14 & 0{,}00 \\
+ & Tolérance 0{,}15   & 35{,}8 & 34 & 10 & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 33{,}9 & 43 & 13 & 0{,}00 \\
+\midrule
+\multirow{4}{*}{seeds}
+ & Sans équité        & 40{,}4 & 10 & 3 & 0{,}04 \\
+ & Contrainte stricte & 60{,}1 & 53 & 17 & 0{,}00 \\
+ & Tolérance 0{,}15   & 33{,}8 & 10 & 2  & 0{,}02 \\
+ & Pénalité $\lambda{=}80$ & 56{,}3 & 10 & 2  & 0{,}02 \\
+\midrule
+\multirow{4}{*}{wine}
+ & Sans équité        & 27{,}4 & 5  & 2  & 0{,}60 \\
+ & Contrainte stricte & 60{,}1 & 48 & 15 & 0{,}00 \\
+ & Tolérance 0{,}15   & 60{,}1 & 37 & 10 & 0{,}12 \\
+ & Pénalité $\lambda{=}80$ & 60{,}2 & 36 & 13 & 0{,}11 \\
+\midrule
+\multirow{4}{*}{glass}
+ & Sans équité        & 60{,}1 & 56 & 16 & 0{,}19 \\
+ & Contrainte stricte & 60{,}1 & 85 & 25 & 0{,}00 \\
+ & Tolérance 0{,}15   & 60{,}1 & 78 & 22 & 0{,}04 \\
+ & Pénalité $\lambda{=}80$ & 60{,}1 & 66 & 19 & 0{,}06 \\
+\midrule
+\multirow{4}{*}{ecoli}
+ & Sans équité        & 13{,}0 & 7  & 6  & 0{,}56 \\
+ & Contrainte stricte & 60{,}1 & 105 & 24 & 0{,}00 \\
+ & Tolérance 0{,}15   & 60{,}1 & 51 & 18 & 0{,}14 \\
+ & Pénalité $\lambda{=}80$ & 60{,}1 & 7  & 6  & 0{,}56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part2_accuracy_vs_fairness.png}
+  \caption{Erreurs d'entraînement.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part2_parity_gap.png}
+  \caption{Parity gap résiduel.}
+\end{subfigure}
+\caption{Impact des contraintes d'équité sur la précision et le parity gap ($D=2$).}
+\label{fig:part2}
+\end{figure}
+
+\subsection{Analyse}
+
+\begin{resultbox}[Observations clés -- Partie 2]
+\begin{itemize}
+  \item Le compromis équité--précision est bien visible : la contrainte stricte réduit le parity gap à 0 mais multiplie les erreurs d'entraînement ($\times$5 à $\times$9 selon le dataset).
+  \item \textbf{Seeds} possède un parity gap initial faible (0{,}04) : la tolérance et la pénalité suffisent à le réduire (0{,}02) sans dégrader la précision (10 erreurs train, 2 en test).
+  \item \textbf{Iris} et \textbf{wine} ont un gap initial élevé ($\sim$0{,}70 et $\sim$0{,}60) : imposer l'équité stricte force le solveur vers des arbres très différents de l'optimal en précision.
+  \item La \textbf{tolérance} $\varepsilon{=}0{,}15$ est le meilleur compromis en pratique : elle réduit significativement le gap tout en limitant la perte de précision. Son temps de calcul est aussi souvent inférieur à la contrainte stricte.
+  \item À $D{=}3$, la plupart des instances avec équité atteignent le time limit (60\,s), ce qui limite la qualité des solutions obtenues.
+  \item Sur \textbf{glass} et \textbf{ecoli}, le compromis équité--précision suit les mêmes tendances~: la contrainte stricte réduit le parity gap à 0 au prix d'une baisse de précision ; la tolérance 0{,}15 reste un bon compromis.
+\end{itemize}
+\end{resultbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════════════════════
+\section{Partie 3 -- Features dérivées}
+\label{sec:part3}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Méthode}
+
+L'idée est d'améliorer la classification en ajoutant de nouvelles features calculées à partir des features existantes, tout en conservant des expressions simples pour l'interprétabilité. L'algorithme procède en quatre étapes :
+
+\begin{enumerate}
+  \item \textbf{Génération des candidats.} Pour chaque paire de features $(j_1, j_2)$, on calcule trois combinaisons algébriques : $x_{j_1} / (x_{j_2} + \varepsilon)$, $x_{j_1} - x_{j_2}$, $x_{j_1} \times x_{j_2}$. Cela produit au plus $3 p(p-1)$ candidats pour $p$ features.
+  \item \textbf{Scoring par gain de Gini.} Chaque candidat est évalué par le gain de Gini du meilleur split binaire sur cette colonne (seuil optimal parmi les midpoints entre valeurs triées).
+  \item \textbf{Sélection des top-$k$.} Les $k$ candidats de plus grand gain sont retenus (par défaut $k{=}5$). Les paramètres des features (indices, type) sont stockés pour pouvoir appliquer la même transformation au jeu de test.
+  \item \textbf{Normalisation.} Après concaténation, les nouvelles colonnes sont normalisées dans $[0,1]$ avec les min/max de l'entraînement.
+\end{enumerate}
+
+\subsection{Résultats expérimentaux}
+
+\paragraph{Protocole.} Cinq jeux (iris, seeds, wine, glass, ecoli). Pour chaque (dataset, $D$), on compare la résolution sans et avec $k{=}5$ features dérivées. Limite de temps : 60\,s.
+
+\begin{table}[H]
+\centering
+\caption{Partie 3 -- Impact des features dérivées sur la précision et le temps.}
+\label{tab:part3}
+\small
+\begin{tabular}{@{}l c l r r r r r@{}}
+\toprule
+Dataset & $D$ & Config & Temps (s) & Obj. & Err.\ train & Err.\ test & $n_{\text{feat}}$ \\
+\midrule
+\multirow{2}{*}{iris} & \multirow{2}{*}{2} & Sans & 8{,}7 & 115 & 5 & 1 & 4 \\
+ & & Avec & 19{,}6 & 115 & 5 & 1 & 9 \\
+\cmidrule{2-8}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 44{,}4 & 120 & 0 & 4 & 4 \\
+ & & Avec & 37{,}2 & 120 & 0 & \cellcolor{navylight}\textbf{1} & 9 \\
+\midrule
+\multirow{2}{*}{seeds} & \multirow{2}{*}{2} & Sans & 46{,}4 & 158 & 10 & 3 & 6 \\
+ & & Avec & 21{,}0 & 158 & 10 & 3 & 11 \\
+\cmidrule{2-8}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}2 & 161 & 7 & 2 & 6 \\
+ & & Avec & 60{,}1 & 159 & 9 & 5 & 11 \\
+\midrule
+\multirow{2}{*}{wine} & \multirow{2}{*}{2} & Sans & 22{,}4 & 137 & 5 & 2 & 13 \\
+ & & Avec & 21{,}3 & 140 & \cellcolor{navylight}\textbf{2} & 1 & 18 \\
+\cmidrule{2-8}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}1 & 136 & 6 & 3 & 13 \\
+ & & Avec & 46{,}0 & 142 & \cellcolor{navylight}\textbf{0} & \cellcolor{navylight}\textbf{1} & 18 \\
+\midrule
+\multirow{2}{*}{glass} & \multirow{2}{*}{2} & Sans & 60{,}1 & 115 & 56 & 16 & 9 \\
+ & & Avec & 60{,}0 & 111 & 60 & 16 & 14 \\
+\cmidrule{2-8}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}2 & 123 & 48 & 22 & 9 \\
+ & & Avec & 60{,}1 & 114 & 57 & 16 & 14 \\
+\midrule
+\multirow{2}{*}{ecoli} & \multirow{2}{*}{2} & Sans & 12{,}8 & 210 & 7 & 6 & 7 \\
+ & & Avec & 43{,}7 & 210 & 7 & 6 & 12 \\
+\cmidrule{2-8}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}1 & 206 & 11 & 8 & 7 \\
+ & & Avec & 60{,}2 & 208 & 9 & 6 & 12 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part3_errors_comparison.png}
+  \caption{Erreurs test.}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part3_time_comparison.png}
+  \caption{Temps de résolution.}
+\end{subfigure}
+\caption{Comparaison sans vs avec features dérivées pour chaque dataset et profondeur.}
+\label{fig:part3}
+\end{figure}
+
+\subsection{Analyse}
+
+\begin{resultbox}[Observations clés -- Partie 3]
+\begin{itemize}
+  \item \textbf{Wine} bénéficie le plus des features dérivées : à $D{=}3$, les erreurs passent de 6 à 0 (train) et de 3 à 1 (test), avec un temps réduit de 60\,s à 46\,s. Les combinaisons algébriques (ratios, différences, produits) entre les 13 features originales permettent de mieux séparer les trois classes.
+  \item \textbf{Iris} à $D{=}3$ : les erreurs test passent de 4 à 1, montrant une meilleure généralisation grâce aux features dérivées.
+  \item \textbf{Seeds} à $D{=}3$ : les features ajoutées n'apportent pas de gain et augmentent même les erreurs (9 vs 7 train, 5 vs 2 test). Cela s'explique par le fait que les 6 features originales séparent déjà bien les classes ; ajouter des variables augmente l'espace de recherche sans bénéfice.
+  \item La \textbf{taille de l'arbre} (nombre de splits $= 2^D - 1$) est fixée par $D$ et reste identique. L'amélioration se traduit par de meilleures performances \emph{à taille d'arbre égale}.
+  \item Le \textbf{temps de résolution} est variable : parfois plus long (iris $D{=}2$ : plus de variables MIP), parfois plus court (wine $D{=}3$ : le problème est mieux structuré avec les features dérivées).
+  \item Sur \textbf{glass} et \textbf{ecoli}, l’ajout de features dérivées peut améliorer la séparation des classes (glass : 6 classes ; ecoli : 8 classes), avec un effet variable sur le temps selon la structure du problème.
+\end{itemize}
+\end{resultbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════════════════════
+\section{Partie 4 -- Formulation univariée pour jeux binaires}
+\label{sec:part4}
+% ══════════════════════════════════════════════════════════════════════════
+
+\subsection{Section 5.1 : la formulation}
+
+On implémente la formulation spécialisée pour les jeux de données à features binaires ($x_{if} \in \{0,1\}$). L'arbre a des nœuds internes $\mathcal{N} = \{1, \ldots, 2^D{-}1\}$ et des feuilles $\mathcal{L} = \{2^D, \ldots, 2^{D+1}{-}1\}$.
+
+\paragraph{Variables.}
+$b_{nf} \in \{0,1\}$ (nœud $n$ branche sur feature $f$),
+$p_n \in \{0,1\}$ (nœud $n$ est feuille),
+$w_{nk} \in \{0,1\}$ (nœud $n$ prédit classe $k$),
+$\theta_i \in \{0,1\}$ (échantillon $i$ bien classé).
+
+\paragraph{Objectif.} $\displaystyle\max\ \frac{1}{|\mathcal{I}|}\sum_{i} \theta_i - \lambda \sum_{n} p_n$.
+
+\paragraph{Convention de branchement.} Si le nœud $n$ branche sur la feature $f$ : le fils gauche ($2n$) reçoit les points avec $x_{if}=0$, le fils droit ($2n+1$) ceux avec $x_{if}=1$.
+
+\begin{theorybox}[Rôle des contraintes (2a)--(2i)]
+
+\textbf{(2a) Objectif.} $\displaystyle\max\ \frac{1}{|\mathcal{I}|}\sum_{i \in \mathcal{I}} \theta_i - \lambda \sum_{n \in \mathcal{N}} p_n$. Le premier terme mesure l'accuracy fractionnaire ; le second pénalise la complexité de l'arbre (nombre de feuilles internes) avec un coefficient $\lambda$ petit, ce qui favorise les arbres élagués à précision égale.
+
+\medskip
+
+\textbf{(2b) Structure de l'arbre.} Pour chaque nœud interne $n \in \mathcal{N}$~:
+\[
+  \sum_{f \in \mathcal{J}} b_{nf} + p_n + \sum_{n_a \in A(n)} p_{n_a} = 1,
+\]
+où $A(n)$ désigne l'ensemble des ancêtres stricts de $n$. Cette contrainte impose une partition exacte en trois cas mutuellement exclusifs~: soit $n$ branche activement sur une feature ($\sum_f b_{nf} = 1$), soit $n$ est lui-même une feuille ($p_n = 1$), soit un ancêtre de $n$ est déjà une feuille ($\exists\, n_a \in A(n),\; p_{n_a} = 1$), auquel cas le sous-arbre sous $n_a$ est élagué.
+
+\medskip
+
+\textbf{(2c) Prédiction de classe.} Pour chaque nœud $n \in \mathcal{N} \cup \mathcal{L}$~:
+\[
+  \sum_{k \in K} w_{nk} = p_n.
+\]
+Si $n$ est une feuille active ($p_n = 1$), il prédit exactement une classe. Si $n$ n'est pas une feuille ($p_n = 0$), alors $w_{nk} = 0$ pour tout $k$ (pas de prédiction).
+
+\medskip
+
+\textbf{(2d) Borne supérieure sur $\theta_i$ pour les nœuds internes.} Pour chaque échantillon $i \in \mathcal{I}$ et chaque nœud interne $n_\ell \in \mathcal{N}$~:
+\[
+  \theta_i \;\leq\; \underbrace{\sum_{n_a \in AL(n_\ell)} \sum_{\substack{f:\, x_{if}=1}} b_{n_a f} \;+\; \sum_{n_a \in AR(n_\ell)} \sum_{\substack{f:\, x_{if}=0}} b_{n_a f}}_{\text{wrong turns (déviations du chemin)}} \;+\; \underbrace{\sum_{f \in \mathcal{J}} b_{n_\ell f}}_{\text{$n_\ell$ branche}} \;+\; \underbrace{\sum_{n' \in A^+(n_\ell)} w_{n', y_i}}_{\text{prédiction correcte}}
+\]
+où $AL(n_\ell)$ (resp.\ $AR(n_\ell)$) est l'ensemble des ancêtres de $n_\ell$ pour lesquels le chemin vers $n_\ell$ passe par le fils gauche (resp.\ droit), et $A^+(n_\ell) = A(n_\ell) \cup \{n_\ell\}$. Les \emph{wrong turns} comptent, pour chaque ancêtre sur le chemin, le nombre de features qui enverraient $i$ du mauvais côté~: si $n_a$ est un ancêtre-gauche et $n_a$ branche sur $f$ avec $x_{if} = 1$, alors $i$ aurait dû aller à droite (déviation). Lorsque $i$ suit exactement le chemin jusqu'à $n_\ell$ sans déviation, les termes de wrong turns sont tous nuls ; $\theta_i = 1$ n'est alors possible que si $n_\ell$ est un nœud de branchement actif \emph{ou} si un nœud de $A^+(n_\ell)$ prédit la classe correcte $y_i$ de~$i$.
+
+\medskip
+
+\textbf{(2e) Borne supérieure sur $\theta_i$ pour les feuilles structurelles.} Pour $n_\ell \in \mathcal{L}$ (nœud feuille dans la structure de l'arbre complet), la contrainte est identique à (2d) mais \emph{sans} le terme $\sum_f b_{n_\ell f}$ (une feuille ne branche pas). Ainsi, $\theta_i = 1$ à la feuille $n_\ell$ exige l'absence de déviations sur le chemin \emph{et} une prédiction correcte par un nœud de $A^+(n_\ell)$.
+
+\medskip
+
+\textbf{(2f)--(2i) Domaines.} $b_{nf}, p_n, w_{nk} \in \{0,1\}$ et $\theta_i \in [0,1]$ (relâché en continu, l'intégralité étant forcée par la structure des autres contraintes).
+\end{theorybox}
+
+Pour les jeux non binaires, on applique une \textbf{binarisation par seuil médian} : $x_{ij}^{\text{bin}} = \mathbf{1}[x_{ij} \geq \text{médiane}(X_j)]$.
+
+\subsection{Section 5.2 : renforcement par Equivalent Sets}
+
+\begin{theorybox}[Définition : Equivalent Set (ES)]
+\begin{definition}
+Un ES pour $\bar{J} \subseteq J$ est un sous-ensemble $\bar{I} \subseteq I$ dont tous les éléments ont la même valeur sur les features de $\bar{J}$, mais ne sont pas tous de la même classe. L'arbre ne peut donc pas les séparer en branchant uniquement sur les features de $\bar{J}$.
+\end{definition}
+\end{theorybox}
+
+On ajoute des variables auxiliaires $\beta_{n,\bar{I}}$ (le sous-arbre en $n$ sépare $\bar{I}$) et $G_k$ (tous les points de classe $k$ dans $\bar{I}$ sont bien classés), avec les contraintes du système~(4).
+
+\begin{theorybox}[Q1 -- Rôle des contraintes du système (4)]
+
+Le système (4) ajoute, pour chaque ES $(\bar{I}, \bar{J})$, des variables auxiliaires $\beta_{n,\bar{I}} \in [0,1]$ (indicatrice~: le sous-arbre enraciné en $n$ \emph{sépare} les échantillons de $\bar{I}$ vers des feuilles différentes), $\beta_{n,l,\bar{I}}$ et $\beta_{n,r,\bar{I}}$ (les éléments de $\bar{I}$ passent tous à gauche / à droite en $n$, puis sont séparés plus bas), et $G_k \in [0,1]$ (tous les éléments de classe $k$ dans $\bar{I}$ sont bien classés). Détaillons chaque contrainte~:
+
+\medskip
+
+\textbf{Contrainte de séparation récursive.}
+\[
+  \beta_{n,\bar{I}} \;\leq\; \sum_{f \in \bar{J}} b_{nf} \;+\; \beta_{n,l,\bar{I}} \;+\; \beta_{n,r,\bar{I}}.
+\]
+Le sous-arbre en $n$ sépare $\bar{I}$ ($\beta_{n,\bar{I}} = 1$) seulement dans l'un des cas suivants~: (a)~$n$ branche sur une feature $f \in \bar{J}$, c'est-à-dire une feature sur laquelle les éléments de $\bar{I}$ diffèrent (le branchement les envoie dans des sous-arbres différents)~; (b)~tous les éléments de $\bar{I}$ vont à gauche en $n$ ($\beta_{n,l,\bar{I}} = 1$) et le sous-arbre gauche les sépare~; (c)~symétriquement à droite.
+
+\medskip
+
+\textbf{Contraintes de direction.}
+\[
+  \beta_{n,l,\bar{I}} \;\leq\; \sum_{\substack{f \notin \bar{J} :\\ x_{if}=0}} b_{nf}, \qquad \beta_{n,r,\bar{I}} \;\leq\; \sum_{\substack{f \notin \bar{J} :\\ x_{if}=1}} b_{nf}.
+\]
+Tous les éléments de $\bar{I}$ peuvent aller ensemble à gauche ($\beta_{n,l,\bar{I}} = 1$) uniquement si $n$ branche sur une feature $f \notin \bar{J}$ pour laquelle les éléments de $\bar{I}$ ont \emph{la même valeur} $x_{if} = 0$ (rappel~: les éléments d'un ES ont la même valeur sur $\bar{J}$, et ici on exige aussi la même valeur $0$ sur la feature $f$ hors de $\bar{J}$). Symétriquement, $\beta_{n,r,\bar{I}} = 1$ exige un branchement sur $f \notin \bar{J}$ avec $x_{if} = 1$.
+
+\medskip
+
+\textbf{Propagation dans les sous-arbres.}
+\[
+  \beta_{n,l,\bar{I}} \;\leq\; \beta_{l(n),\bar{I}}, \qquad \beta_{n,r,\bar{I}} \;\leq\; \beta_{r(n),\bar{I}}.
+\]
+Si tous les éléments de $\bar{I}$ passent à gauche en $n$, la séparation doit se faire dans le sous-arbre gauche $l(n)$~: on propage l'exigence de séparation vers le fils.
+
+\medskip
+
+\textbf{Contrainte globale de classification.}
+\[
+  \sum_{k \in K^*_{\bar{I}}} G_k \;\leq\; 1 \;+\; \bigl(|K^*_{\bar{I}}| - 1\bigr) \cdot \beta_{G,\bar{I}},
+\]
+où $K^*_{\bar{I}}$ est l'ensemble des classes représentées dans $\bar{I}$ et $\beta_{G,\bar{I}} \leq \beta_{1,\bar{I}}$ (l'arbre complet sépare $\bar{I}$). Si l'arbre \emph{ne sépare pas} $\bar{I}$ ($\beta_{G,\bar{I}} = 0$), alors $\sum_k G_k \leq 1$~: au plus une classe dans $\bar{I}$ peut avoir tous ses éléments bien classés. C'est cohérent car, sans séparation, tous les éléments de $\bar{I}$ aboutissent à la même feuille et reçoivent la même prédiction. Si l'arbre les sépare ($\beta_{G,\bar{I}} = 1$), la contrainte devient $\sum_k G_k \leq |K^*_{\bar{I}}|$, ce qui est toujours vrai (non contraignant).
+
+\medskip
+
+\textbf{Lien $\theta$--$G$.}
+\[
+  \forall\, k \in K^*_{\bar{I}}, \qquad \sum_{i \in \bar{I}_k} \theta_i \;=\; |\bar{I}_k| \cdot G_k.
+\]
+Cette égalité force un comportement ``tout ou rien'' au sein de chaque sous-groupe de classe~: soit \emph{tous} les éléments de classe $k$ dans $\bar{I}$ sont bien classés ($G_k = 1$, $\theta_i = 1$ pour tout $i \in \bar{I}_k$), soit \emph{aucun} ne l'est ($G_k = 0$). C'est le cœur du renforcement~: dans la formulation de base, certains éléments d'un ES pourraient être fractionnellement ``bien classés'' dans la relaxation LP, ce que cette contrainte empêche.
+\end{theorybox}
+
+\begin{theorybox}[Q2 -- Adaptation des contraintes de propagation aux feuilles]
+
+Les contraintes de propagation $\beta_{n,l,\bar{I}} \leq \beta_{l(n),\bar{I}}$ et $\beta_{n,r,\bar{I}} \leq \beta_{r(n),\bar{I}}$ supposent que les fils $l(n)$ et $r(n)$ sont des nœuds internes capables de séparer $\bar{I}$. Or, lorsque $l(n)$ (ou $r(n)$) est une \textbf{feuille structurelle} (i.e.\ $l(n) \in \mathcal{L}$), ce nœud ne peut pas brancher et ne peut donc pas séparer les éléments de $\bar{I}$~: tous les échantillons qui y arrivent reçoivent la même prédiction.
+
+On doit donc adapter la contrainte~: puisqu'une feuille ne sépare jamais un ES, on a $\beta_{l(n),\bar{I}} = 0$ par construction. La contrainte de propagation devient~:
+\[
+  \beta_{n,l,\bar{I}} \;\leq\; 0 \qquad \text{si } l(n) \in \mathcal{L},
+\]
+ce qui force $\beta_{n,l,\bar{I}} = 0$~: il est impossible que les éléments de $\bar{I}$ aillent tous à gauche en $n$ et soient ensuite séparés, puisque le fils gauche est une feuille. Symétriquement, $\beta_{n,r,\bar{I}} \leq 0$ lorsque $r(n) \in \mathcal{L}$.
+
+En pratique, cela signifie que pour un nœud $n$ dont les deux fils sont des feuilles (c'est le cas au dernier niveau de l'arbre), la seule manière de séparer $\bar{I}$ en $n$ est de brancher directement sur une feature de $\bar{J}$~: le terme $\sum_{f \in \bar{J}} b_{nf}$ doit valoir~1 dans la contrainte de séparation récursive.
+\end{theorybox}
+
+\begin{theorybox}[Q3 -- Peut-on imposer $G_k \in \{0,1\}$~?]
+
+\textbf{Réponse~: oui}, imposer $G_k \in \{0,1\}$ est valide et renforce la formulation.
+
+\textbf{Validité.} La contrainte $\sum_{i \in \bar{I}_k} \theta_i = |\bar{I}_k| \cdot G_k$ lie $G_k$ à la somme des $\theta_i$ pour les éléments de classe $k$ dans l'ES. Dans toute solution entière réalisable, chaque $\theta_i \in \{0,1\}$, donc~:
+\[
+  G_k = \frac{1}{|\bar{I}_k|} \sum_{i \in \bar{I}_k} \theta_i \;\in\; \Bigl\{ \frac{0}{|\bar{I}_k|},\; \frac{1}{|\bar{I}_k|},\; \ldots,\; \frac{|\bar{I}_k|}{|\bar{I}_k|} \Bigr\}.
+\]
+En particulier, $G_k$ ne prend que des valeurs rationnelles dans $[0,1]$. L'observation clé est que la contrainte $\sum_{k \in K^*} G_k \leq 1 + (|K^*|-1)\beta_G$ combinée à la maximisation de $\sum_i \theta_i$ pousse $G_k$ vers les extrêmes~: à l'optimum entier, soit tous les $\theta_i$ d'un sous-groupe valent~1 (donc $G_k = 1$), soit au moins un vaut~0. En fait, la contrainte de lien ``tout ou rien'' implique que les valeurs intermédiaires de $G_k$ (par ex.\ $\frac{1}{3}$ si $|\bar{I}_k| = 3$) ne peuvent correspondre qu'à des solutions où un seul $\theta_i = 1$ et les autres $= 0$ dans $\bar{I}_k$, ce qui est sous-optimal.
+
+\textbf{Renforcement.} Sans l'intégralité de $G_k$, la relaxation LP peut trouver des solutions fractionnaires où, par exemple, $G_k = 0{,}5$ avec tous les $\theta_i = 0{,}5$ --- ce qui satisfait les contraintes mais ne correspond à aucune classification réelle. Imposer $G_k \in \{0,1\}$ élimine ces solutions fractionnaires et resserre le polytope LP, ce qui peut accélérer la convergence du branch-and-bound.
+\end{theorybox}
+
+\subsection{Section 5.3 : borne alternative sur $\theta$}
+
+\begin{theorybox}[Q6 -- Rôle et intérêt de la contrainte alternative (5)]
+
+La contrainte (5) propose une borne alternative sur $\theta_i$ qui exploite la structure \textbf{parent--enfant} de l'arbre. Considérons un nœud parent $n_p \in \mathcal{N}$ et l'un de ses enfants $n_\ell$ (le second enfant, le ``frère'', est noté $n_s$). La contrainte (5) s'écrit~:
+\[
+  \theta_i \;\leq\; \underbrace{\sum_{n_a \in \text{path}(n_p)} (\text{wrong turns en } n_a)}_{\text{déviations jusqu'au parent}} \;+\; \frac{1}{2}\biggl(\; \underbrace{\sum_{\substack{f:\, x_{if} \text{ envoie}\\ i \text{ vers } n_s}} b_{n_p f}}_{\substack{\text{$n_p$ branche ``mal''}\\\text{(envoie $i$ du mauvais côté)}}} \;+\; \underbrace{w_{n_s, y_i}}_{\substack{\text{le frère $n_s$ prédit}\\\text{la classe de $i$}}} \;\biggr) \;+\; \sum_{n' \in A^+(n_\ell)} w_{n', y_i}.
+\]
+
+\textbf{Intuition.} Le terme $\frac{1}{2}(\cdot)$ couple deux informations~:
+\begin{itemize}
+  \item $\sum_{f} b_{n_p f}$ (avec la condition sur $x_{if}$) vaut 1 si le parent $n_p$ branche sur une feature qui envoie $i$ vers le frère $n_s$ plutôt que vers $n_\ell$ (déviation au dernier branchement).
+  \item $w_{n_s, y_i}$ vaut 1 si le frère $n_s$ prédit la classe correcte $y_i$.
+\end{itemize}
+Chacun de ces termes vaut au plus 1, donc le demi-terme vaut au plus 1. Mais la force de la contrainte réside dans le couplage par le facteur $\frac{1}{2}$~:
+
+\medskip
+
+\textbf{Pourquoi c'est plus serré que (2d).} Dans la contrainte (2d), le wrong turn au parent et la prédiction du frère sont comptés \emph{séparément} et valent chacun au plus 1 (contribution totale $\leq 2$). Dans (5), le facteur $\frac{1}{2}$ limite cette contribution à $\leq 1$, même dans la relaxation LP. Concrètement, dans une solution fractionnaire de la relaxation, si le solveur essaie de donner $\theta_i = 1$ en exploitant à la fois une demi-déviation et une demi-prédiction du frère, la contrainte (5) l'en empêche~: $\frac{1}{2}(0{,}5 + 0{,}5) = 0{,}5 < 1$.
+
+\medskip
+
+\textbf{Conséquence pratique.} En resserrant la relaxation LP, la contrainte (5) réduit le gap d'intégralité initial et peut guider le branch-and-bound vers de meilleures solutions. Quand elle est ajoutée \emph{en complément} de (2d) et (2e) (mode \texttt{alt\_both}), elle peut orienter le solveur vers des arbres de meilleure qualité de généralisation parmi les multiples optima en entraînement.
+\end{theorybox}
+
+Trois modes sont implémentés :
+\begin{itemize}
+  \item \textbf{alt\_replace} : la contrainte (5) remplace (2d) pour les nœuds parents de feuilles.
+  \item \textbf{alt\_both} : (5) est ajoutée en complément de (2d) et (2e).
+  \item \textbf{lazy} : les contraintes $\theta$ sont ajoutées dynamiquement via un lazy callback.
+\end{itemize}
+
+\subsection{Résultats expérimentaux}
+
+\paragraph{Protocole.} Cinq jeux (iris, seeds, wine, glass, ecoli) binarisés par seuil médian. Six configurations comparées : formulation standard (5.1), avec ES (5.2), borne alternative seule (5.3 alt\_replace), les deux (5.3 alt\_both), lazy callback (5.3 lazy), et la formulation~F classique sur données binarisées (référence). Profondeurs $D \in \{2,3\}$, limite 60\,s.
+
+\begin{table}[H]
+\centering
+\caption{Partie 4 -- Résultats $D=2$ (données binarisées).}
+\label{tab:part4d2}
+\small
+\begin{tabular}{@{}l l r r r r@{}}
+\toprule
+Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test \\
+\midrule
+\multirow{6}{*}{iris}
+ & Standard       & 0{,}11 & 0 & 24 & 5 \\
+ & ES             & 0{,}08 & 0 & 24 & 5 \\
+ & Alt.\ replace  & 0{,}08 & 0 & 24 & 5 \\
+ & Alt.\ both     & 0{,}10 & 0 & 24 & 5 \\
+ & Lazy           & 1{,}00 & 0 & 24 & 5 \\
+ & \textit{Form.\ F} & 0{,}28 & 0 & 24 & 5 \\
+\midrule
+\multirow{6}{*}{seeds}
+ & Standard       & 0{,}12 & 0 & 25 & 12 \\
+ & ES             & 0{,}25 & 0 & 25 & 12 \\
+ & Alt.\ replace  & 0{,}22 & 0 & 25 & 12 \\
+ & Alt.\ both     & 0{,}27 & 0 & 25 & 12 \\
+ & Lazy           & 0{,}09 & 0 & 25 & 12 \\
+ & \textit{Form.\ F} & 0{,}88 & 0 & 25 & 12 \\
+\midrule
+\multirow{6}{*}{wine}
+ & Standard       & 0{,}28 & 0 & 11 & 2 \\
+ & ES             & 2{,}44 & 0 & 11 & 2 \\
+ & Alt.\ replace  & 0{,}31 & 0 & 11 & 2 \\
+ & Alt.\ both     & 0{,}31 & 0 & 11 & 2 \\
+ & Lazy           & 0{,}22 & 0 & 11 & 2 \\
+ & \textit{Form.\ F} & 1{,}49 & 0 & 11 & 2 \\
+\midrule
+\multirow{6}{*}{glass}
+ & Standard       & 0{,}92 & 0 & 73 & 21 \\
+ & ES             & 2{,}61 & 0 & 73 & 21 \\
+ & Alt.\ replace  & 0{,}78 & 0 & 73 & 21 \\
+ & Alt.\ both     & 1{,}08 & 0 & 73 & 21 \\
+ & Lazy           & 0{,}99 & 0 & 73 & 21 \\
+ & \textit{Form.\ F} & 4{,}10 & 0 & 73 & 21 \\
+\midrule
+\multirow{6}{*}{ecoli}
+ & Standard       & 0{,}17 & 0 & 46 & 10 \\
+ & ES             & 0{,}31 & 0 & 46 & 10 \\
+ & Alt.\ replace  & 0{,}31 & 0 & 46 & 10 \\
+ & Alt.\ both     & 0{,}36 & 0 & 46 & 10 \\
+ & Lazy           & 0{,}23 & 0 & 46 & 10 \\
+ & \textit{Form.\ F} & 1{,}53 & 0 & 46 & 10 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Partie 4 -- Résultats $D=3$ (données binarisées).}
+\label{tab:part4d3}
+\small
+\begin{tabular}{@{}l l r r r r@{}}
+\toprule
+Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test \\
+\midrule
+\multirow{6}{*}{iris}
+ & Standard       & 0{,}16 & 0 & 24 & 13 \\
+ & ES             & 0{,}26 & 0 & 24 & 14 \\
+ & Alt.\ replace  & 0{,}23 & 0 & 24 & 12 \\
+ & Alt.\ both     & 0{,}27 & 0 & 24 & \cellcolor{navylight}\textbf{5} \\
+ & Lazy           & 0{,}17 & 0 & 24 & 14 \\
+ & \textit{Form.\ F} & 1{,}39 & 0 & 24 & 14 \\
+\midrule
+\multirow{6}{*}{seeds}
+ & Standard       & 0{,}53 & 0 & 21 & 14 \\
+ & ES             & 1{,}33 & 0 & 21 & 14 \\
+ & Alt.\ replace  & 0{,}74 & 0 & 21 & 14 \\
+ & Alt.\ both     & 1{,}04 & 0 & 21 & 14 \\
+ & Lazy           & 1{,}83 & 0 & 21 & 14 \\
+ & \textit{Form.\ F} & 8{,}16 & 0 & 21 & 14 \\
+\midrule
+\multirow{6}{*}{wine}
+ & Standard       & 4{,}05 & 0 & 7 & 1 \\
+ & ES             & 60{,}1 & 4{,}8 & 7 & 1 \\
+ & Alt.\ replace  & 4{,}69 & 0 & 7 & 1 \\
+ & Alt.\ both     & 6{,}09 & 0 & 7 & 1 \\
+ & Lazy           & 11{,}8 & 0 & 7 & 1 \\
+ & \textit{Form.\ F} & 60{,}1 & 5{,}6 & 8 & 3 \\
+\midrule
+\multirow{6}{*}{glass}
+ & Standard       & 36{,}5 & 0 & 56 & 20 \\
+ & ES             & 60{,}1 & 30{,}8 & 57 & 19 \\
+ & Alt.\ replace  & 24{,}4 & 0 & 56 & 21 \\
+ & Alt.\ both     & 30{,}0 & 0 & 56 & 20 \\
+ & Lazy           & 60{,}0 & 36{,}5 & 58 & 20 \\
+ & \textit{Form.\ F} & 60{,}1 & 23{,}0 & 57 & 20 \\
+\midrule
+\multirow{6}{*}{ecoli}
+ & Standard       & 1{,}72 & 0 & 39 & 11 \\
+ & ES             & 13{,}0 & 0 & 39 & 11 \\
+ & Alt.\ replace  & 2{,}04 & 0 & 39 & 10 \\
+ & Alt.\ both     & 2{,}71 & 0 & 39 & 11 \\
+ & Lazy           & 19{,}0 & 0 & 39 & 10 \\
+ & \textit{Form.\ F} & 12{,}8 & 0 & 39 & 11 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part4_time_by_config.png}
+  \caption{Temps par configuration ($D{=}3$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part4_speedup.png}
+  \caption{Ratio temps Form.~F / Standard.}
+\end{subfigure}
+\caption{Performance de la formulation binaire comparée à la formulation~F.}
+\label{fig:part4}
+\end{figure}
+
+\subsection{Analyse}
+
+\begin{resultbox}[Observations clés -- Partie 4]
+\begin{itemize}
+  \item \textbf{Formulation binaire vs formulation~F.} La formulation binaire est nettement plus rapide sur tous les jeux binarisés. Le gain est spectaculaire sur wine à $D{=}3$ : $\sim$4\,s contre 60\,s (time limit, gap 5{,}6\,\%). La structure compacte (variables $b_{nf}$, $w_{nk}$, $\theta_i$) se prête mieux à la résolution que les variables de flot de la formulation~F.
+  \item \textbf{Renforcement ES (5.2).} L'ajout des contraintes ES ne modifie pas la précision (même optimal) mais \emph{augmente} le temps : pour wine $D{=}3$, on passe de 4\,s à 60\,s (time limit). Le grand nombre de variables $\beta$ ajoutées pénalise la résolution. L'utilité est surtout théorique (resserrement de la relaxation LP).
+  \item \textbf{Borne alternative (5.3).} Le mode \texttt{alt\_both} (ajout de (5) en complément de (2d)+(2e)) guide le solveur vers des arbres de meilleure qualité test sur iris $D{=}3$ : \textbf{5 erreurs test} contre 13--14 pour les autres configurations. Cet effet est dû au resserrement de la relaxation LP qui favorise un arbre mieux généralisable parmi les solutions optimales en entraînement.
+  \item \textbf{Lazy callback.} Donne les mêmes résultats en précision que la formulation standard mais avec un surcoût dû au mécanisme de callback (vérification à chaque nœud entier). Wine $D{=}3$ : 11{,}8\,s vs 4\,s.
+  \item \textbf{Impact de la binarisation.} La binarisation par seuil médian perd de l'information : iris passe de 5 erreurs train (données continues, Partie~1) à 24 erreurs (données binarisées). Cette dégradation est intrinsèque à la discrétisation, pas à la formulation.
+  \item Sur \textbf{glass} et \textbf{ecoli}, la formulation binaire reste plus rapide que la formulation~F sur données binarisées ; le renforcement ES et le mode \texttt{alt\_both} ont un impact similaire à celui observé sur les trois jeux de base.
+\end{itemize}
+\end{resultbox}
+
+
+% ══════════════════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════════════════════
+\section*{Conclusion}
+\addcontentsline{toc}{section}{Conclusion}
+% ══════════════════════════════════════════════════════════════════════════
+% ══════════════════════════════════════════════════════════════════════════
+
+Ce projet a permis d'explorer quatre directions complémentaires pour enrichir le modèle MIP d'arbres de décision optimaux :
+
+\begin{enumerate}
+  \item \textbf{Égalités valides} : les linked sets et opposite box corners permettent de resserrer la relaxation LP et de réduire le nombre de nœuds B\&B, en particulier sur iris (jusqu'à $-40$\,\% de nœuds). L'arrondi des features augmente le nombre d'égalités détectables mais peut dégrader marginalement la qualité de la solution.
+
+  \item \textbf{Équité} : le compromis équité--précision est confirmé expérimentalement. La contrainte stricte assure un parity gap nul au prix d'une forte dégradation de la précision. La tolérance $\varepsilon{=}0{,}15$ offre le meilleur compromis en pratique, surtout quand le gap initial est élevé.
+
+  \item \textbf{Features dérivées} : l'ajout de combinaisons algébriques sélectionnées par gain de Gini améliore significativement la classification sur wine (erreurs test $3 \to 1$ à $D{=}3$) et iris (erreurs test $4 \to 1$), mais peut dégrader les performances sur des jeux déjà bien séparés (seeds).
+
+  \item \textbf{Formulation binaire} : la formulation spécialisée est $5\times$ à $15\times$ plus rapide que la formulation~F sur données binarisées (iris, seeds, wine). Sur les cinq jeux (avec glass et ecoli), les mêmes tendances s'observent. Le renforcement par ES augmente le temps sans gain pratique. La borne alternative \texttt{alt\_both} peut améliorer la qualité de généralisation en guidant le solveur vers de meilleurs optima parmi les solutions équivalentes en entraînement.
+\end{enumerate}
+
+\paragraph{Jeux de données.} Conformément au sujet, les expériences portent sur les trois jeux fournis (\texttt{iris}, \texttt{seeds}, \texttt{wine}) et sur deux jeux supplémentaires au choix~: \texttt{glass} (classification de types de verre, UCI, 9~features, 6~classes) et \texttt{ecoli} (localisation de protéines, UCI, 7~features, 8~classes), cohérents avec le cadre du projet (classification supervisée, features numériques, arbres de décision optimaux).
+
+\end{document}
