@@ -1,4 +1,5 @@
 # Partie 2 : arbres équitables (parité démographique / equal opportunity)
+include("datasets_config.jl")
 include("building_tree.jl")
 include("utilities.jl")
 include("fairness.jl")
@@ -25,7 +26,7 @@ Lance les expériences Partie 2 : avec/sans équité (parité démographique ou 
 - penalty_value : valeur de fairness_penalty si run_penalty (défaut 80.0 pour avoir un effet visible)
 - fairness_tolerance : si > 0 et run_constraint, lance aussi une config avec contrainte assouplie |taux_A - taux_B| <= tolerance (défaut 0.15)
 """
-function run_part2(; time_limit_sec::Int=60, datasets::Vector{String}=["iris", "seeds", "wine", "glass", "ecoli"], depths::Vector{Int}=[2, 3], fairness_type::Symbol=:demographic_parity, positive_class::Int=1, run_constraint::Bool=true, run_penalty::Bool=true, penalty_value::Float64=80.0, fairness_tolerance::Float64=0.15, save_results::Union{String,Nothing}=nothing)
+function run_part2(; time_limit_sec::Int=DEFAULT_TIME_LIMIT_PARTS, datasets::Vector{String}=copy(DEFAULT_DATASETS), depths::Vector{Int}=[2, 3], fairness_type::Symbol=:demographic_parity, positive_class::Int=1, run_constraint::Bool=true, run_penalty::Bool=true, penalty_value::Float64=80.0, fairness_tolerance::Float64=0.15, save_results::Union{String,Nothing}=nothing)
     headers = ["dataset", "depth", "n_train", "n_test", "config", "time_sec", "gap_pct", "objective", "err_train", "err_test", "parity_gap", "eq_opp_gap"]
     rows = Vector{Vector{Any}}(undef, 0)
 
@@ -116,5 +117,5 @@ function run_part2(; time_limit_sec::Int=60, datasets::Vector{String}=["iris", "
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_part2(time_limit_sec=60, save_results="results/part2_results.csv", run_constraint=true, run_penalty=true, penalty_value=80.0, fairness_tolerance=0.15)
+    run_part2(save_results="results/part2_results.csv", run_constraint=true, run_penalty=true, penalty_value=80.0, fairness_tolerance=0.15)
 end

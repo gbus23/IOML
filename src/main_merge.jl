@@ -1,20 +1,24 @@
+include("datasets_config.jl")
 include("building_tree.jl")
 include("utilities.jl")
 include("merge.jl")
 
 function main_merge()
-    for dataSetName in ["iris", "seeds", "wine"]
-        
+    for dataSetName in DEFAULT_DATASETS
+        data_path = abspath(joinpath(@__DIR__, "..", "data", dataSetName * ".txt"))
+        isfile(data_path) || continue
+
         print("=== Dataset ", dataSetName)
-        
-        # Préparation des données
-        include("../data/" * dataSetName * ".txt")
-        
-        # Ramener chaque caractéristique sur [0, 1]
+
+        include(data_path)
+
         reducedX = Matrix{Float64}(X)
         for j in 1:size(X, 2)
-            reducedX[:, j] .-= minimum(X[:, j])
-            reducedX[:, j] ./= maximum(X[:, j])
+            mj, Mj = minimum(X[:, j]), maximum(X[:, j])
+            reducedX[:, j] .-= mj
+            if Mj > mj
+                reducedX[:, j] ./= (Mj - mj)
+            end
         end
 
         train, test = train_test_indexes(length(Y))

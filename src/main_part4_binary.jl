@@ -1,12 +1,13 @@
 # Partie 4 : formulation binaire (5.1, 5.2 ES, 5.3 alt θ, lazy)
+include("datasets_config.jl")
 include("building_tree.jl")
 include("binary_oct.jl")
 include("utilities.jl")
 using DelimitedFiles
 
 function run_part4(;
-    time_limit_sec::Int=60,
-    datasets::Vector{String}=["iris", "seeds", "wine", "glass", "ecoli"],
+    time_limit_sec::Int=DEFAULT_TIME_LIMIT_PARTS,
+    datasets::Vector{String}=copy(DEFAULT_DATASETS),
     depths::Vector{Int}=[2, 3],
     lambda::Float64=0.0,
     save_results::Union{String,Nothing}=nothing,
@@ -92,5 +93,5 @@ function run_part4(;
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_part4(time_limit_sec=60, save_results="results/part4_results.csv")
+    run_part4(save_results="results/part4_results.csv")
 end

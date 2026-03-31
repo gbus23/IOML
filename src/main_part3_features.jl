@@ -1,4 +1,5 @@
 # Partie 3 : features dérivées (ratios, diff, produits) par gain Gini
+include("datasets_config.jl")
 include("building_tree.jl")
 include("utilities.jl")
 include("feature_engineering.jl")
@@ -28,7 +29,7 @@ Lance les expériences Partie 3 : avec/sans features dérivées (ratios, différ
 - k_features : nombre de nouvelles features à ajouter (sélectionnées par gain de Gini)
 Mesure : nombre d'erreurs (train/test), temps de résolution, objectif, taille d'arbre (fixe = 2^D - 1 nœuds).
 """
-function run_part3(; time_limit_sec::Int=60, datasets::Vector{String}=["iris", "seeds", "wine", "glass", "ecoli"], depths::Vector{Int}=[2, 3], k_features::Int=5, save_results::Union{String,Nothing}=nothing)
+function run_part3(; time_limit_sec::Int=DEFAULT_TIME_LIMIT_PARTS, datasets::Vector{String}=copy(DEFAULT_DATASETS), depths::Vector{Int}=[2, 3], k_features::Int=5, save_results::Union{String,Nothing}=nothing)
     headers = ["dataset", "depth", "n_train", "n_test", "n_features_orig", "n_features_aug", "k_added", "config", "time_sec", "gap_pct", "objective", "tree_n_splits", "err_train", "err_test"]
     rows = Vector{Vector{Any}}(undef, 0)
 
@@ -104,5 +105,5 @@ function run_part3(; time_limit_sec::Int=60, datasets::Vector{String}=["iris", "
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_part3(time_limit_sec=60, save_results="results/part3_results.csv", k_features=5)
+    run_part3(save_results="results/part3_results.csv", k_features=5)
 end

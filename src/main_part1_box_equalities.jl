@@ -1,10 +1,15 @@
 # Partie 1 : linked sets + box corners
-function run_part1(; time_limit_sec::Int=60, datasets::Vector{String}=["iris", "seeds", "wine", "glass", "ecoli"], depths::Vector{Int}=[2, 3], round_digits_list::Vector{Union{Int,Nothing}}=Union{Int,Nothing}[nothing], save_results::Union{String,Nothing}=nothing, use_box_corners_too::Bool=true)
+include("datasets_config.jl")
+include("building_tree.jl")
+include("utilities.jl")
+
+function run_part1(; time_limit_sec::Int=DEFAULT_TIME_LIMIT_PARTS, datasets::Vector{String}=copy(DEFAULT_DATASETS), depths::Vector{Int}=[2, 3], round_digits_list::Vector{Union{Int,Nothing}}=Union{Int,Nothing}[nothing], save_results::Union{String,Nothing}=nothing, use_box_corners_too::Bool=true)
     headers = ["dataset", "round_digits", "depth", "n_train", "n_test", "n_features", "n_equalities", "config", "time_sec", "gap_pct", "objective", "lp_value", "nodes_bb", "err_train", "err_test"]
     rows = Vector{Vector{Any}}(undef, 0)
 
     for dataSetName in datasets
         data_path = abspath(joinpath(@__DIR__, "..", "data", dataSetName * ".txt"))
+        isfile(data_path) || continue
         include(data_path)
         X = Main.eval(:X)
         Y = Main.eval(:Y)
@@ -85,5 +90,5 @@ function run_part1(; time_limit_sec::Int=60, datasets::Vector{String}=["iris", "
 end
 
 if abspath(PROGRAM_FILE) == @__FILE__
-    run_part1(time_limit_sec=60, save_results="results/part1_results.csv")
+    run_part1(save_results="results/part1_results.csv")
 end

@@ -1,7 +1,6 @@
 # Projet – Arbres de décision optimaux (optimisation en nombres entiers)
 
-Ce dépôt contient l’implémentation en **Julia** du projet de cours (arbres de classification optimaux, formulation F, égalités de type “linked sets (Section 4)”, etc.).  
-Il sera complété au fur et à mesure (parties 2, 3, expériences, résultats).
+Ce dépôt contient l’implémentation en **Julia** du projet de cours (arbres de classification optimaux, formulation F, égalités “linked sets” (Section 4), parties 2–4, etc.).
 
 ---
 
@@ -10,6 +9,7 @@ Il sera complété au fur et à mesure (parties 2, 3, expériences, résultats).
 ```
 projet/
 ├── README.md                 # Ce fichier (description et mode d’emploi)
+├── run_all.jl                # **Un seul script** : main + parties 1–4 (CSV) ; option env IOML_RUN_CLUSTERING
 ├── run_main.jl               # Lance la résolution F standard (univarié / multivarié)
 ├── run_part1.jl              # Partie 1 sans arrondi (flux unitaire + box equalities)
 ├── run_part1_with_rounding.jl # Partie 1 avec arrondi (none, 2, 3, 4 décimales)
@@ -17,9 +17,8 @@ projet/
 ├── run_part3.jl               # Partie 3 : nouvelles features dérivées
 ├── run_part4.jl               # Partie 4 : formulation binaire (Section 5.1)
 ├── data/
-│   ├── iris.txt
-│   ├── seeds.txt
-│   └── wine.txt
+│   ├── iris.txt, seeds.txt, wine.txt   # jeux fournis
+│   ├── glass.txt, ecoli.txt            # deux jeux supplémentaires (sujet)
 ├── results/
 │   ├── part1_results.csv  # Partie 1 (run_part1.jl)
 │   ├── part2_results.csv  # Partie 2 (run_part2.jl)
@@ -30,9 +29,10 @@ projet/
 │   ├── proof_section4_proposition.md
 │   └── figures/               # Figures générées (PDF/PNG) pour le rapport
 ├── scripts/
-│   └── plot_part1_results.jl  # Génère les graphiques à partir du CSV
+│   └── generate_all_plots.jl  # Figures PNG (parties 1–4 + variantes enrichies)
 └── src/
-    ├── main.jl                # Script principal (formulation F, tous datasets)
+    ├── datasets_config.jl       # `DEFAULT_DATASETS`, `DEFAULT_TIME_LIMIT_MAIN` / `DEFAULT_TIME_LIMIT_PARTS` (env. `IOML_TL_*`)
+    ├── main.jl                # Formulation F (uni / multivarié) — utilise `DEFAULT_DATASETS`
     ├── main_part1_box_equalities.jl   # Script Partie 1 (avec/sans égalités)
     ├── building_tree.jl       # Formulation F, flux unitaire, égalités box corners et linked sets
     ├── box_equalities.jl       # Détection opposite box corners et linked sets (Section 4)
@@ -62,7 +62,7 @@ projet/
 Le rapport de la Partie 1 est dans \texttt{doc/rapport\_partie1.tex}. Il contient~: formulation F et flux unitaire, égalités linked sets (Section 4) (définitions, proposition, preuve), algorithmes (détection, cutting plane), arrondi des features, expériences et résultats (avec tableaux et figures TikZ : arbre, boîte 2D).
 
 - **Compiler** : depuis \texttt{doc/} : \texttt{pdflatex rapport\_partie1.tex} (deux fois si besoin pour la table des matières).
-- **Illustrations à partir des données** : après avoir exécuté \texttt{run\_part1.jl} ou \texttt{run\_part1\_with\_rounding.jl} (pour produire \texttt{results/part1\_results.csv}), lancer \texttt{julia scripts/plot\_part1\_results.jl} pour générer les graphiques dans \texttt{doc/figures/}. Décommenter les \texttt{\\includegraphics} dans le rapport pour les inclure.
+- **Illustrations à partir des CSV** : placer \texttt{part1\_results\_v3.csv}, \texttt{part2\_results.csv}, \ldots{} dans \texttt{results/}, puis \texttt{julia --project=. scripts/generate\_all\_plots.jl}. Les PNG vont dans \texttt{doc/figures/} : figures « classiques » (\texttt{part1\_time\_comparison.png}, \ldots) + figures **enrichies** (impact B\&B, coût équité, delta features, heatmap gap MIP, etc.). Décommenter les \texttt{\\includegraphics} dans le rapport si besoin.
 
 ---
 
@@ -74,6 +74,8 @@ Le rapport de la Partie 1 est dans \texttt{doc/rapport\_partie1.tex}. Il contien
 
 Installer les paquets si besoin : `using Pkg; Pkg.add("JuMP"); Pkg.add("CPLEX")` (sous réserve de licence CPLEX).
 
+**Temps CPLEX** : par défaut **180 s** pour `main()` et **300 s** pour `run_part1`…`run_part4` / `run_all.jl`. Tests rapides : `IOML_TL_MAIN=60 IOML_TL_PARTS=60 julia --project=. run_all.jl`. Rapport plus long : ex. `IOML_TL_MAIN=600 IOML_TL_PARTS=900`.
+
 ---
 
 ## Lancement
@@ -82,7 +84,12 @@ Depuis la racine du projet :
 
 ```bash
 cd chemin/vers/projet
-julia run_main.jl
+# Tout en une fois (main + parties 1–4, CSV dans results/) :
+julia --project=. run_all.jl
+# Variante avec clustering (FU + itératif, long) :
+# IOML_RUN_CLUSTERING=1 julia --project=. run_all.jl
+
+julia --project=. run_main.jl
 julia run_part1.jl
 julia run_part1_with_rounding.jl   # Partie 1 avec arrondi (none, 1, 2, 3, 4 décimales)
 julia run_part2.jl                 # Partie 2 : arbres équitables (fairness)
@@ -92,8 +99,9 @@ julia run_part4.jl                 # Partie 4 : formulation binaire (Section 5.1
 
 **Important** : `run_part1(...)` est une **fonction Julia**. Pour l’appeler avec des options (ex. `round_digits_list`), il faut être dans le REPL Julia : lancer `julia`, puis `include("src/main_part1_box_equalities.jl")`, puis taper l’appel. Depuis PowerShell/terminal, utiliser les scripts `.jl` (ex. `julia run_part1_with_rounding.jl`) pour lancer des variantes.
 
-- **`run_main.jl`** : résolution de la formulation F sur **iris, seeds, wine** (univarié et multivarié, profondeurs D = 2, 3, 4, time limit 30 s par défaut).
-- **`run_part1.jl`** : expériences **Partie 1** sur **iris, seeds, wine**, profondeurs D = 2 et 3, avec/sans égalités “linked sets (Section 4)” (time limit 60 s par défaut). Les résultats sont enregistrés dans **`results/part1_results.csv`**.
+- **`run_main.jl`** : appelle `main()` — formulation F sur les **cinq jeux** de `DEFAULT_DATASETS` (univarié et multivarié, D = 2…4). Temps CPLEX par défaut : **`DEFAULT_TIME_LIMIT_MAIN`** (180 s), surcharge `main(time_limit=…)` ou variable d’environnement **`IOML_TL_MAIN`**.
+- **`main_merge()`** / **`main_iterative()`** : à inclure depuis `src/` ; ils bouclent aussi sur **`DEFAULT_DATASETS`** (même liste que le sujet : 3 + 2 jeux).
+- **`run_part1.jl`** : Partie 1 sur les **cinq jeux**, D = 2 et 3, avec/sans égalités linked sets. Temps par défaut : **`DEFAULT_TIME_LIMIT_PARTS`** (300 s), ou **`IOML_TL_PARTS`** → **`results/part1_results.csv`**.
 
 **Arrondi des features** : pour augmenter le nombre d’égalités “linked sets (Section 4)”, on peut arrondir les features après normalisation. Paramètre `round_digits_list` (liste de précisions) :
 - `[nothing]` (défaut) : pas d’arrondi ;
@@ -104,12 +112,12 @@ Exemples depuis la REPL :
 
 ```julia
 include("src/main_part1_box_equalities.jl")
-run_part1(time_limit_sec=60, save_results="results/part1_results.csv")
+run_part1(save_results="results/part1_results.csv")
 # avec plusieurs précisions d’arrondi (sans, 2, 3 décimales) :
-run_part1(time_limit_sec=60, round_digits_list=[nothing, 2, 3], save_results="results/part1_results.csv")
+run_part1(round_digits_list=[nothing, 2, 3], save_results="results/part1_results.csv")
 # avec TOUTES les égalités (linked sets + opposite box corners) :
-run_part1(time_limit_sec=60, save_results="results/part1_results.csv", use_box_corners_too=true)
-# sans sauvegarde, un seul dataset :
+run_part1(save_results="results/part1_results.csv", use_box_corners_too=true)
+# sans sauvegarde, un seul dataset, temps court :
 run_part1(time_limit_sec=45, datasets=["iris"], depths=[2], save_results=nothing)
 ```
 
@@ -166,18 +174,34 @@ Nécessite JuMP récent (ex. `relax_integrality`).
 ### 5. Script d’évaluation Partie 1
 
 - **`src/main_part1_box_equalities.jl`** définit `run_part1(...)` :
-  - Charge chaque jeu de données (iris, seeds, wine), normalise, fait train/test.
+  - Charge chaque jeu (liste par défaut = `DEFAULT_DATASETS`), normalise, fait train/test.
   - Pour chaque profondeur (par défaut D = 2, 3) :
     - Résout **sans** égalités (avec flux unitaire).
     - Résout **avec** les égalités linked sets (Section 4) ; le nombre d'égalités dépend des coïncidences sur les features (arrondi aide pour seeds/wine).
   - Affiche : temps de résolution, gap, objectif, **valeur de la relaxation linéaire (LP)**, **nombre de nœuds du branch-and-bound**, erreurs train/test.
   - **Arrondi** : `round_digits_list` (défaut `[nothing]`) permet de tester plusieurs précisions (ex. `[nothing, 2, 3, 4]`) ; les features normalisées sont arrondies avant recherche des égalités et entraînement.
   - Si `save_results="chemin/fichier.csv"` est fourni, enregistre les résultats en CSV (colonnes : dataset, **round_digits**, depth, n_train, n_test, n_features, n_equalities, config, time_sec, gap_pct, objective, lp_value, nodes_bb, err_train, err_test).
-- **`run_part1.jl`** appelle `run_part1(time_limit_sec=60, save_results="results/part1_results.csv")` : tous les jeux (iris, seeds, wine) et D = 2, 3 sont exécutés et les résultats sont stockés dans **`results/part1_results.csv`**.
+- **`run_part1.jl`** appelle `run_part1(save_results="results/part1_results.csv")` (temps = `DEFAULT_TIME_LIMIT_PARTS`) : tous les jeux de `DEFAULT_DATASETS` et D = 2, 3 → **`results/part1_results.csv`**.
 - **Comparaison LP / nœuds B&B** : pour chaque configuration (avec/sans égalités), le script résout d’abord la relaxation linéaire (sans limite de temps) pour obtenir la valeur LP, puis restaure l’intégralité et résout le MIP ; le nombre de nœuds est récupéré via les statistiques CPLEX (attribut MOI `NodeCount` dans JuMP).
 
-### 6. Ce qui peut être complété plus tard (Partie 1)
-- **Linked sets** : la détection est implémentée dans \texttt{box\_equalities.jl} (\texttt{find\_linked\_sets(x; tol)}). La proposition de la Section~4 (égalité (1)) est prouvée dans le rapport. L’ajout des contraintes linked set au modèle MIP peut être fait ultérieurement.
+### 6. Intégration MIP
+
+Les égalités **linked sets** (et optionnellement **opposite box corners**) sont ajoutées au modèle lorsque `linked_set_equalities=true` / `box_equalities=true` dans `build_tree` (voir `building_tree.jl`).
+
+---
+
+## Questions ouvertes du sujet (`Project.pdf`) — état dans ce dépôt
+
+| # | Thème (sujet) | Dans `IOML_2` |
+|---|----------------|---------------|
+| **1** | Section 4 : flux unitaire, preuve, détection coins / linked sets, égalités, impact LP/B&B, arrondi, cutting planes | **Fait** : `building_tree.jl`, `box_equalities.jl`, `cutting_plane_box.jl`, `main_part1_box_equalities.jl`, `doc/proof_section4_proposition.md`, `doc/rapport_partie1.tex`. Arbres **univariés** pour cette partie. |
+| **2** | Fairness : objectifs/contraintes, intégration au modèle, tests | **Fait** : `fairness.jl`, `main_part2_fairness.jl`, `run_part2.jl`. |
+| **3** | Nouvelles features, algorithme de sélection, métriques | **Fait** : `feature_engineering.jl`, `main_part3_features.jl`, `run_part3.jl`. |
+| **4** | Section 5.1 formulation binaire ; **5.2** renforcement ES ; **5.3** borne alternative sur θ ; lazy (sujet) | **Fait** : `binary_oct.jl` (5.1, 5.2, 5.3, lazy callback) ; `main_part4_binary.jl` enchaîne les variantes (`5.1_standard`, `5.2_ES`, `5.3_*`, `formulation_F`). |
+| **5** | Hypothèses de clustering proches de **H1**, solutions optimales ou proches | **Non traité comme travail autonome** : `merge.jl` / `exactMerge` restent le code de base ; pas d’étude ou de script dédié listé ici. |
+| **6** | Idées diverses pour améliorer les performances | **Partiel** : couvert **indirectement** (fairness, features, renforts Partie 4), pas de section “question 6” séparée. |
+
+**Rapport** : le sujet demande résultats (temps, précision, profondeurs, uni/multivarié) + description des questions ouvertes — voir `doc/rapport_partie1.tex` pour la Partie 1 ; pour un rapport unique, compiler ou fusionner avec les résultats des parties 2–4.
 
 ---
 
@@ -218,7 +242,7 @@ Depuis le REPL :
 
 ```julia
 include("src/main_part2_fairness.jl")
-run_part2(time_limit_sec=60, save_results="results/part2_results.csv")
+run_part2(save_results="results/part2_results.csv")
 # Equal opportunity au lieu de parité démographique :
 run_part2(fairness_type=:equal_opportunity, save_results="results/part2_results.csv")
 # Meilleur compromis : contrainte avec tolérance 0.2 ou pénalité 100 :
@@ -262,7 +286,7 @@ Avec deux features, si une classe est à l’intérieur d’un cercle et l’aut
   - `augment_dataset(X, y, classes; k=5)` : retourne `(X_aug, recipes, selected_indices)`.
   - `apply_augmentation(X_other, recipes, selected_indices)` : applique la même augmentation à un autre jeu (ex. test).
 
-- **`src/main_part3_features.jl`** : pour chaque jeu (iris, seeds, wine) et chaque profondeur (D = 2, 3) :
+- **`src/main_part3_features.jl`** : pour chaque jeu (`DEFAULT_DATASETS` par défaut) et chaque profondeur (D = 2, 3) :
   - Résout l’arbre **sans** nouvelles features → temps, objectif, erreurs train/test, nombre de splits (\(2^D - 1\)).
   - Sélectionne les top-k features sur l’entraînement, augmente train et test, re-normalise, résout **avec** nouvelles features → mêmes métriques.
   - Enregistre tout dans **`results/part3_results.csv`** (dataset, depth, n_features_orig, n_features_aug, k_added, config, time_sec, gap_pct, objective, tree_n_splits, err_train, err_test).
@@ -277,7 +301,7 @@ Depuis le REPL :
 
 ```julia
 include("src/main_part3_features.jl")
-run_part3(time_limit_sec=60, save_results="results/part3_results.csv", k_features=5)
+run_part3(save_results="results/part3_results.csv", k_features=5)
 # Plus de nouvelles features :
 run_part3(k_features=10)
 ```
@@ -286,7 +310,7 @@ run_part3(k_features=10)
 
 ## Partie 4 – Formulation univariée pour jeux de données binaires (Section 5)
 
-Question ouverte 4 du projet : implémenter la formulation de la Section 5.1 du sujet (données binaires), la comparer à la formulation F, et tester sur des jeux non binaires après binarisation.
+Question ouverte 4 : formulation **5.1**, renforcement **5.2**, borne **5.3** et lazy (selon le sujet), comparaison avec la formulation F sur données binarisées.
 
 ### Formulation (2a)–(2i) (Section 5.1)
 
@@ -297,11 +321,8 @@ Question ouverte 4 du projet : implémenter la formulation de la Section 5.1 du 
 
 ### Implémentation
 
-- **`src/binary_oct.jl`** : `get_ancestors(n)`, `get_AL_AR(n)` ; `binarize_threshold(X)` (seuil médian par colonne → 0/1) ; `build_tree_binary(x, y, D, classes; lambda, time_limit)` qui résout le MIP (2a)–(2i) et retourne un `Tree` compatible avec `prediction_errors`.
-- **`src/main_part4_binary.jl`** : pour chaque jeu (iris, seeds, wine), normalisation [0,1], binarisation (seuil médian), puis pour chaque profondeur \(D\) :
-  - **Formulation binaire** sur données 0/1 ;
-  - **Formulation F** sur données continues (référence) ;
-  - **Formulation F** sur données binarisées (même entrée que la formulation binaire).
+- **`src/binary_oct.jl`** : `get_ancestors`, `get_AL_AR`, `binarize_threshold`, `build_tree_binary` (MIP 5.1 + options **5.2** ES, **5.3** `theta_bound_mode`, **lazy** sur \(\theta\)).
+- **`src/main_part4_binary.jl`** : pour chaque jeu de la liste (défaut : `DEFAULT_DATASETS`), normalisation [0,1], binarisation (seuil médian), puis pour chaque profondeur \(D\) : variantes **5.1**, **5.2 (ES)**, **5.3** (remplacement / les deux / lazy), plus **formulation F** sur les mêmes données binarisées en référence.
 - Résultats dans **`results/part4_results.csv`** (dataset, depth, config, time_sec, gap_pct, objective, err_train, err_test).
 
 ### Lancement Partie 4
@@ -314,10 +335,10 @@ Depuis le REPL :
 
 ```julia
 include("src/main_part4_binary.jl")
-run_part4(time_limit_sec=60, save_results="results/part4_results.csv")
+run_part4(save_results="results/part4_results.csv")
 ```
 
-**À compléter (optionnel)** : renforcement Section 5.2 (Equivalent Sets, contraintes (4)), borne alternative sur \(\theta\) (5.3), et lazy callbacks pour les contraintes sur \(\theta\).
+Les renforcements **5.2** (Equivalent Sets), **5.3** (borne alternative sur \(\theta\)) et les **lazy callbacks** sur \(\theta\) sont implémentés dans `binary_oct.jl` et activables via les noms de config dans `main_part4_binary.jl` (voir les clés `use_es`, `theta_bound_mode`, `use_lazy_theta`).
 
 ---
 

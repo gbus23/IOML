@@ -102,6 +102,8 @@ La \textbf{Partie~2} intègre des contraintes d'équité (parité démographique
 La \textbf{Partie~3} propose un algorithme de génération de features dérivées (ratios, différences, produits) sélectionnées par gain de Gini.
 La \textbf{Partie~4} implémente la formulation univariée pour jeux de données binaires, son renforcement par Equivalent Sets et des bornes alternatives sur les variables~$\theta$.
 Les expériences sont menées sur cinq jeux de données~: \texttt{iris}, \texttt{seeds}, \texttt{wine} (fournis), \texttt{glass} et \texttt{ecoli} (UCI), avec des profondeurs $D\in\{2,3\}$.
+Les limites de temps CPLEX sont centralisées dans \texttt{src/datasets\_config.jl} (\texttt{IOML\_TL\_MAIN}, \texttt{IOML\_TL\_PARTS}) ; les tableaux numériques correspondent aux fichiers CSV du dossier \texttt{results/} au moment de la rédaction.
+Des figures complémentaires (réduction B\&B, compromis équité) sont générées par \texttt{scripts/generate\_all\_plots.jl} en plus des graphiques de base.
 \end{abstract}
 
 \tableofcontents
@@ -221,11 +223,11 @@ Dans les trois cas, le membre gauche est égal au membre droit. L'égalité est 
 
 \subsection{Résultats expérimentaux}
 
-\paragraph{Protocole.} Cinq jeux de données~: \texttt{iris} (4~features, 120/30 train/test), \texttt{seeds} (6~features, 168/42), \texttt{wine} (13~features, 142/36), \texttt{glass} (9~features, classification de types de verre), \texttt{ecoli} (7~features, localisation de protéines). Données normalisées dans $[0,1]$. Profondeurs $D \in \{2,3\}$. Limite de temps : 60~s. On compare la résolution \emph{sans} et \emph{avec} égalités (linked sets + opposite box corners), avec différents niveaux d'arrondi (aucun, 1, 2 décimales).
+\paragraph{Protocole.} Cinq jeux de données~: \texttt{iris} (4~features, 120/30 train/test), \texttt{seeds} (6~features, 168/42), \texttt{wine} (13~features, 142/36), \texttt{glass} (9~features, classification de types de verre), \texttt{ecoli} (7~features, localisation de protéines). Données normalisées dans $[0,1]$. Profondeurs $D \in \{2,3\}$. Limite CPLEX pour \texttt{run\_part1}~: \texttt{DEFAULT\_TIME\_LIMIT\_PARTS} (défaut 300\,s, surcharge \texttt{IOML\_TL\_PARTS}) ; les valeurs du tableau~\ref{tab:part1} proviennent de \texttt{part1\_results.csv} (run récent avec limite 300\,s). On compare la résolution \emph{sans} et \emph{avec} égalités (linked sets + opposite box corners), avec différents niveaux d'arrondi (aucun, 1, 2 décimales).
 
 \begin{table}[H]
 \centering
-\caption{Résultats sans arrondi, $D=2$ : temps, nœuds B\&B et erreurs (source : \texttt{part1\_results\_v3.csv}). $^\ast$Time limit (60\,s) atteint pour glass, gap $\approx$ 20--27\,\%.}
+\caption{Résultats sans arrondi, $D=2$ : temps, nœuds B\&B et erreurs (source : \texttt{part1\_results.csv}, run 300\,s).}
 \label{tab:part1}
 \small
 \begin{tabular}{@{}l cc cc cc@{}}
@@ -234,11 +236,11 @@ Dans les trois cas, le membre gauche est égal au membre droit. L'égalité est 
 \cmidrule(lr){2-3}\cmidrule(lr){4-5}\cmidrule(lr){6-7}
 Dataset & Sans & Avec & Sans & Avec & Sans & Avec \\
 \midrule
-iris   & 6{,}1  & 4{,}8  & 1389  & 1187  & 1 & 1 \\
-seeds  & 55{,}8 & 49{,}8 & 14464 & 14462 & 3 & 3 \\
-wine   & 54{,}0 & 55{,}4 & 17752 & 17737 & 2 & 2 \\
-glass  & 60{,}1$^\ast$ & 60{,}1$^\ast$ & 21635 & 21010 & 16 & 16 \\
-ecoli  & 21{,}6 & 19{,}8 & 4797  & 4797  & 6 & 6 \\
+iris   & 1{,}3  & 0{,}9  & 1181   & 1070   & 1 & 1 \\
+seeds  & 11{,}6 & 11{,}6 & 30808  & 30808  & 2 & 2 \\
+wine   & 12{,}1 & 12{,}2 & 23283  & 23283  & 2 & 2 \\
+glass  & 263{,}6 & 264{,}4 & 843168 & 818825 & 17 & 17 \\
+ecoli  & 3{,}1  & 3{,}0  & 2160   & 2160   & 6 & 6 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -247,13 +249,13 @@ ecoli  & 21{,}6 & 19{,}8 & 4797  & 4797  & 6 & 6 \\
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part1_time_comparison.png}
+  \includegraphics[width=\textwidth]{figures/part1_time_comparison.pdf}
   \caption{Temps de résolution.}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part1_nodes_comparison.png}
+  \includegraphics[width=\textwidth]{figures/part1_nodes_comparison.pdf}
   \caption{Nœuds de branch-and-bound.}
 \end{subfigure}
 \caption{Comparaison avec/sans égalités (sans arrondi) pour chaque dataset et profondeur.}
@@ -262,22 +264,37 @@ ecoli  & 21{,}6 & 19{,}8 & 4797  & 4797  & 6 & 6 \\
 
 \begin{figure}[H]
 \centering
-\includegraphics[width=0.65\textwidth]{figures/part1_equalities_by_rounding.png}
+\includegraphics[width=0.65\textwidth]{figures/part1_equalities_by_rounding.pdf}
 \caption{Nombre d'égalités détectées selon le niveau d'arrondi ($D=2$, config avec égalités).}
 \label{fig:part1_rounding}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part1_bb_node_reduction_pct.pdf}
+  \caption{Réduction relative des nœuds B\&B (avec vs sans égalités, arrondi \texttt{none}).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part1_lp_mip_gap_normalized.pdf}
+  \caption{Écart de relaxation $(\text{LP}-\text{MIP})/n_{\text{train}}$ sans égalités.}
+\end{subfigure}
+\caption{Indicateurs complémentaires pour la Partie~1 (même protocole que la figure~\ref{fig:part1_comparison}).}
+\label{fig:part1_enriched}
 \end{figure}
 
 \subsection{Analyse}
 
 \begin{resultbox}[Observations clés -- Partie 1]
 \begin{itemize}
-  \item \textbf{Iris} : 285 égalités sans arrondi (2952 avec 1~décimale). À $D=3$, le temps passe de 52\,s à 20\,s avec égalités, et les nœuds B\&B de 5282 à 3254. Gain net.
-  \item \textbf{Seeds} : aucune égalité sans arrondi ; 1047 avec 1 décimale. Temps légèrement meilleur avec égalités à $D=2$ (50\,s vs 56\,s). À $D=3$, les deux configs atteignent le time limit.
-  \item \textbf{Wine} : aucune égalité sans arrondi. Temps et erreurs similaires avec ou sans égalités ; à $D=3$, time limit atteint pour les deux.
-  \item \textbf{Glass} (9~features, 171 train, 43 test) : 11 égalités sans arrondi, 36 avec 1 décimale. Time limit atteint à $D=2$ (gap $\approx$ 20--27\,\%) ; les égalités réduisent légèrement les nœuds B\&B (21010 vs 21635). Erreurs test identiques (16) avec ou sans égalités.
-  \item \textbf{Ecoli} (7~features, 217 train, 55 test) : aucune égalité sans arrondi, 2 avec 1 décimale. Temps légèrement meilleur avec égalités à $D=2$ (19{,}8\,s vs 21{,}6\,s). Nœuds identiques (4797) ; erreurs test 6 dans les deux cas.
-  \item L'arrondi augmente les égalités mais peut dégrader la solution (ex. seeds à 1 décimale : 16 err. train vs 10 sans arrondi).
-  \item La \textbf{précision} reste identique ou très proche sur les cinq jeux quand l'optimal est atteint, confirmant que les égalités ne modifient pas l'ensemble des solutions entières réalisables.
+  \item \textbf{Bilan global (run 300\,s, sans arrondi, $D=2$).} L'ajout d'égalités ne change pas les erreurs test sur les cinq jeux (\texttt{iris} 1, \texttt{seeds} 2, \texttt{wine} 2, \texttt{glass} 17, \texttt{ecoli} 6), ce qui indique une qualité prédictive stable.
+  \item \textbf{Impact temps.} L'effet sur le temps de résolution est faible à modéré selon le jeu : amélioration sur \texttt{iris} (1{,}3\,s $\to$ 0{,}9\,s) et \texttt{ecoli} (3{,}1\,s $\to$ 3{,}0\,s), neutre sur \texttt{seeds} (11{,}6\,s $\to$ 11{,}6\,s), légère hausse sur \texttt{wine} (12{,}1\,s $\to$ 12{,}2\,s) et \texttt{glass} (263{,}6\,s $\to$ 264{,}4\,s).
+  \item \textbf{Impact B\&B.} Les égalités réduisent les nœuds explorés sur \texttt{iris} (1181 $\to$ 1070) et \texttt{glass} (843168 $\to$ 818825), et sont neutres sur \texttt{seeds}, \texttt{wine} et \texttt{ecoli}.
+  \item \textbf{Cas \texttt{glass}.} C'est l'instance la plus coûteuse du lot (ordre de grandeur $10^5$--$10^6$ nœuds), où les égalités apportent un allègement du B\&B mais pas de gain de précision ni de temps net.
+  \item Ces résultats suggèrent que, dans ce protocole, les égalités jouent surtout un rôle de \textbf{stabilisation/resserrement de la recherche combinatoire}, avec un bénéfice pratique dépendant du dataset.
 \end{itemize}
 \end{resultbox}
 
@@ -331,46 +348,88 @@ La contrainte de parité~\eqref{eq:constraint} (ou sa version avec tolérance) e
 
 \subsection{Résultats expérimentaux}
 
-\paragraph{Protocole.} Cinq jeux de données (iris, seeds, wine, glass, ecoli). Groupe sensible synthétique : médiane de la première feature. Quatre configurations comparées à $D \in \{2,3\}$, limite 60\,s.
+\paragraph{Protocole.} Cinq jeux de données (iris, seeds, wine, glass, ecoli). Groupe sensible synthétique : médiane de la première feature. Quatre configurations comparées à $D \in \{2,3\}$. Limite CPLEX \texttt{DEFAULT\_TIME\_LIMIT\_PARTS} (typ.\ 300\,s ; les valeurs ci-dessous proviennent de \texttt{part2\_results.csv}). Colonne \textbf{Gap}~: écart d'optimalité MIP (\%) lorsque la limite est atteinte.
 
 \begin{table}[H]
 \centering
-\caption{Partie 2 -- Compromis équité-précision (parité démographique, $D=2$).}
+\caption{Partie 2 -- Compromis équité-précision (parité démographique, $D=2$). Source : \texttt{part2\_results.csv}.}
 \label{tab:part2}
 \small
-\begin{tabular}{@{}l l r r r r@{}}
+\begin{tabular}{@{}l l r r r r r@{}}
 \toprule
-Dataset & Configuration & Temps (s) & Err.\ train & Err.\ test & Parity gap \\
+Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test & Parity gap \\
 \midrule
 \multirow{4}{*}{iris}
- & Sans équité        & 2{,}8  & 5  & 1  & 0{,}70 \\
- & Contrainte stricte & 10{,}5 & 43 & 14 & 0{,}00 \\
- & Tolérance 0{,}15   & 35{,}8 & 34 & 10 & 0{,}15 \\
- & Pénalité $\lambda{=}80$ & 33{,}9 & 43 & 13 & 0{,}00 \\
+ & Sans équité        & 1{,}3  & 0 & 5  & 1  & 0{,}70 \\
+ & Contrainte stricte & 7{,}0  & 0 & 43 & 15 & 0{,}00 \\
+ & Tolérance 0{,}15   & 6{,}3  & 0 & 34 & 6  & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 7{,}2  & 0 & 43 & 13 & 0{,}00 \\
 \midrule
 \multirow{4}{*}{seeds}
- & Sans équité        & 40{,}4 & 10 & 3 & 0{,}04 \\
- & Contrainte stricte & 60{,}1 & 53 & 17 & 0{,}00 \\
- & Tolérance 0{,}15   & 33{,}8 & 10 & 2  & 0{,}02 \\
- & Pénalité $\lambda{=}80$ & 56{,}3 & 10 & 2  & 0{,}02 \\
+ & Sans équité        & 6{,}0  & 0 & 10 & 2 & 0{,}02 \\
+ & Contrainte stricte & 205{,}8 & 0 & 53 & 17 & 0{,}00 \\
+ & Tolérance 0{,}15   & 9{,}4  & 0 & 10 & 2  & 0{,}02 \\
+ & Pénalité $\lambda{=}80$ & 18{,}7 & 0 & 10 & 2  & 0{,}02 \\
 \midrule
 \multirow{4}{*}{wine}
- & Sans équité        & 27{,}4 & 5  & 2  & 0{,}60 \\
- & Contrainte stricte & 60{,}1 & 48 & 15 & 0{,}00 \\
- & Tolérance 0{,}15   & 60{,}1 & 37 & 10 & 0{,}12 \\
- & Pénalité $\lambda{=}80$ & 60{,}2 & 36 & 13 & 0{,}11 \\
+ & Sans équité        & 9{,}0  & 0 & 5  & 2  & 0{,}60 \\
+ & Contrainte stricte & 190{,}6 & 0 & 46 & 13 & 0{,}00 \\
+ & Tolérance 0{,}15   & 46{,}4 & 0 & 31 & 12 & 0{,}14 \\
+ & Pénalité $\lambda{=}80$ & 50{,}9 & 0 & 39 & 15 & 0{,}01 \\
 \midrule
 \multirow{4}{*}{glass}
- & Sans équité        & 60{,}1 & 56 & 16 & 0{,}19 \\
- & Contrainte stricte & 60{,}1 & 85 & 25 & 0{,}00 \\
- & Tolérance 0{,}15   & 60{,}1 & 78 & 22 & 0{,}04 \\
- & Pénalité $\lambda{=}80$ & 60{,}1 & 66 & 19 & 0{,}06 \\
+ & Sans équité        & 45{,}1 & 0 & 56 & 16 & 0{,}19 \\
+ & Contrainte stricte & 177{,}9 & 0 & 81 & 26 & 0{,}00 \\
+ & Tolérance 0{,}15   & 123{,}2 & 0 & 61 & 18 & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 293{,}4 & 0 & 65 & 21 & 0{,}05 \\
 \midrule
 \multirow{4}{*}{ecoli}
- & Sans équité        & 13{,}0 & 7  & 6  & 0{,}56 \\
- & Contrainte stricte & 60{,}1 & 105 & 24 & 0{,}00 \\
- & Tolérance 0{,}15   & 60{,}1 & 51 & 18 & 0{,}14 \\
- & Pénalité $\lambda{=}80$ & 60{,}1 & 7  & 6  & 0{,}56 \\
+ & Sans équité        & 3{,}6  & 0 & 7  & 6  & 0{,}56 \\
+ & Contrainte stricte & 300{,}0 & 38{,}7 & 105 & 24 & 0{,}00 \\
+ & Tolérance 0{,}15   & 23{,}6 & 0 & 45 & 14 & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 31{,}2 & 0 & 7  & 6  & 0{,}56 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[H]
+\centering
+\caption{Partie 2 -- Même protocole, profondeur $D=3$ (extrait \texttt{part2\_results.csv}). $^\dagger$~gap MIP $>0$ : limite de temps atteinte sans preuve d'optimalité.}
+\label{tab:part2d3}
+\small
+\begin{tabular}{@{}l l r r r r r@{}}
+\toprule
+Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test & Parity gap \\
+\midrule
+\multirow{4}{*}{iris}
+ & Sans équité        & 8{,}4  & 0 & 0 & 4 & 0{,}70 \\
+ & Contrainte stricte & 185{,}9 & 0 & 42 & 4 & 0{,}00 \\
+ & Tolérance 0{,}15   & 300{,}0$^\dagger$ & 29{,}7 & 33 & 13 & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 79{,}3 & 0 & 42 & 3 & 0{,}00 \\
+\midrule
+\multirow{4}{*}{seeds}
+ & Sans équité        & 300{,}7$^\dagger$ & 3{,}7 & 6 & 1 & 0{,}04 \\
+ & Contrainte stricte & 300{,}0$^\dagger$ & 46{,}1 & 53 & 17 & 0{,}00 \\
+ & Tolérance 0{,}15   & 301{,}4$^\dagger$ & 1{,}8 & 3 & 1 & 0{,}03 \\
+ & Pénalité $\lambda{=}80$ & 300{,}1$^\dagger$ & 4{,}7 & 6 & 3 & 0{,}02 \\
+\midrule
+\multirow{4}{*}{wine}
+ & Sans équité        & 40{,}9 & 0 & 0 & 6 & 0{,}55 \\
+ & Contrainte stricte & 300{,}0$^\dagger$ & 51{,}1 & 48 & 15 & 0{,}00 \\
+ & Tolérance 0{,}15   & 300{,}0$^\dagger$ & 25{,}7 & 29 & 10 & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 300{,}0$^\dagger$ & 38{,}5 & 39 & 9 & 0{,}01 \\
+\midrule
+\multirow{4}{*}{glass}
+ & Sans équité        & 300{,}0$^\dagger$ & 23{,}6 & 37 & 14 & 0{,}19 \\
+ & Contrainte stricte & 300{,}0$^\dagger$ & 90{,}0 & 81 & 23 & 0{,}00 \\
+ & Tolérance 0{,}15   & 300{,}0$^\dagger$ & 36{,}8 & 46 & 14 & 0{,}09 \\
+ & Pénalité $\lambda{=}80$ & 300{,}0$^\dagger$ & 47{,}1 & 53 & 17 & 0{,}03 \\
+\midrule
+\multirow{4}{*}{ecoli}
+ & Sans équité        & 300{,}0$^\dagger$ & 0{,}9 & 3 & 5 & 0{,}58 \\
+ & Contrainte stricte & 300{,}1$^\dagger$ & 93{,}7 & 105 & 24 & 0{,}00 \\
+ & Tolérance 0{,}15   & 300{,}1$^\dagger$ & 24{,}7 & 43 & 11 & 0{,}15 \\
+ & Pénalité $\lambda{=}80$ & 300{,}1$^\dagger$ & 29{,}2 & 3 & 5 & 0{,}58 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -379,29 +438,53 @@ Dataset & Configuration & Temps (s) & Err.\ train & Err.\ test & Parity gap \\
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part2_accuracy_vs_fairness.png}
+  \includegraphics[width=\textwidth]{figures/part2_accuracy_vs_fairness.pdf}
   \caption{Erreurs d'entraînement.}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part2_parity_gap.png}
+  \includegraphics[width=\textwidth]{figures/part2_parity_gap.pdf}
   \caption{Parity gap résiduel.}
 \end{subfigure}
 \caption{Impact des contraintes d'équité sur la précision et le parity gap ($D=2$).}
 \label{fig:part2}
 \end{figure}
 
+\begin{figure}[H]
+\centering
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part2_fairness_cost_delta_test_D2.pdf}
+  \caption{$\Delta$ erreurs test vs sans équité ($D=2$).}
+\end{subfigure}
+\hfill
+\begin{subfigure}[t]{0.48\textwidth}
+  \centering
+  \includegraphics[width=\textwidth]{figures/part2_fairness_tradeoff_paths_D2.pdf}
+  \caption{Nuage de points dans l'espace (parity gap, erreurs test).}
+\end{subfigure}
+\caption{Figures complémentaires Partie~2 (même CSV que les tableaux~\ref{tab:part2}--\ref{tab:part2d3}).}
+\label{fig:part2_enriched}
+\end{figure}
+
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{figures/part2_fairness_cost_delta_test_D3.pdf}
+\caption{$\Delta$ erreurs test vs configuration sans équité pour $D{=}3$ (tableau~\ref{tab:part2d3}).}
+\label{fig:part2_delta_d3}
+\end{figure}
+
 \subsection{Analyse}
 
 \begin{resultbox}[Observations clés -- Partie 2]
 \begin{itemize}
-  \item Le compromis équité--précision est bien visible : la contrainte stricte réduit le parity gap à 0 mais multiplie les erreurs d'entraînement ($\times$5 à $\times$9 selon le dataset).
-  \item \textbf{Seeds} possède un parity gap initial faible (0{,}04) : la tolérance et la pénalité suffisent à le réduire (0{,}02) sans dégrader la précision (10 erreurs train, 2 en test).
-  \item \textbf{Iris} et \textbf{wine} ont un gap initial élevé ($\sim$0{,}70 et $\sim$0{,}60) : imposer l'équité stricte force le solveur vers des arbres très différents de l'optimal en précision.
-  \item La \textbf{tolérance} $\varepsilon{=}0{,}15$ est le meilleur compromis en pratique : elle réduit significativement le gap tout en limitant la perte de précision. Son temps de calcul est aussi souvent inférieur à la contrainte stricte.
-  \item À $D{=}3$, la plupart des instances avec équité atteignent le time limit (60\,s), ce qui limite la qualité des solutions obtenues.
-  \item Sur \textbf{glass} et \textbf{ecoli}, le compromis équité--précision suit les mêmes tendances~: la contrainte stricte réduit le parity gap à 0 au prix d'une baisse de précision ; la tolérance 0{,}15 reste un bon compromis.
+  \item Le compromis équité--précision est confirmé par \texttt{part2\_results.csv} : la contrainte stricte force un parity gap nul, mais augmente fortement les erreurs (ex.\ à $D{=}2$ : \texttt{iris} 5 $\to$ 43 train et 1 $\to$ 15 test ; \texttt{wine} 5 $\to$ 46 train et 2 $\to$ 13 test).
+  \item \textbf{Seeds} a un gap initial faible (0{,}019 à $D{=}2$) : tolérance et pénalité gardent pratiquement le même niveau d'équité et la même précision (10 erreurs train, 2 test).
+  \item \textbf{Tolérance $\varepsilon=0{,}15$} : à $D{=}2$, c'est le meilleur compromis sur les jeux avec gap initial élevé (\texttt{iris}, \texttt{wine}, \texttt{glass}, \texttt{ecoli}), avec un coût en erreurs inférieur à la contrainte stricte et des temps nettement plus bas.
+  \item \textbf{Pénalité} : comportement dataset-dépendant. Elle fonctionne bien sur \texttt{iris} et \texttt{wine} (gap proche de 0), mais peut échouer à réduire l'inéquité sur \texttt{ecoli} ($D{=}2$ : parity gap inchangé à 0{,}556, mêmes erreurs que sans équité).
+  \item À $D{=}3$, plusieurs configurations atteignent 300\,s avec \textbf{gap MIP non nul} (\texttt{seeds}, \texttt{wine}, \texttt{glass}, \texttt{ecoli}) ; les métriques rapportées sont donc celles de la meilleure solution trouvée, sans preuve d'optimalité entière.
+  \item \textbf{Glass} et \textbf{ecoli} restent les cas les plus difficiles : la contrainte stricte y est très coûteuse (ex.\ \texttt{ecoli} $D{=}3$ : gap 93{,}7\,\%, 105 erreurs train, 24 test).
 \end{itemize}
 \end{resultbox}
 
@@ -425,46 +508,46 @@ L'idée est d'améliorer la classification en ajoutant de nouvelles features cal
 
 \subsection{Résultats expérimentaux}
 
-\paragraph{Protocole.} Cinq jeux (iris, seeds, wine, glass, ecoli). Pour chaque (dataset, $D$), on compare la résolution sans et avec $k{=}5$ features dérivées. Limite de temps : 60\,s.
+\paragraph{Protocole.} Cinq jeux (iris, seeds, wine, glass, ecoli). Pour chaque couple (dataset, $D$), comparaison sans nouvelles colonnes vs avec $k{=}5$ features dérivées. Limite CPLEX \texttt{DEFAULT\_TIME\_LIMIT\_PARTS} (référence : \texttt{part3\_results.csv}). Colonne \textbf{Gap} : écart d'optimalité MIP (\%) si la limite est atteinte. $n_{\text{spl}}$ : nombre de splits de l'arbre (structure fixée par $D$).
 
 \begin{table}[H]
 \centering
-\caption{Partie 3 -- Impact des features dérivées sur la précision et le temps.}
+\caption{Partie 3 -- Impact des features dérivées sur la précision et le temps (source \texttt{part3\_results.csv}).}
 \label{tab:part3}
 \small
-\begin{tabular}{@{}l c l r r r r r@{}}
+\begin{tabular}{@{}l c l r r r r r r@{}}
 \toprule
-Dataset & $D$ & Config & Temps (s) & Obj. & Err.\ train & Err.\ test & $n_{\text{feat}}$ \\
+Dataset & $D$ & Config & Temps (s) & Gap (\%) & Obj. & Err.\ tr. & Err.\ te. & $n_{\text{feat}}$ / $n_{\text{spl}}$ \\
 \midrule
-\multirow{2}{*}{iris} & \multirow{2}{*}{2} & Sans & 8{,}7 & 115 & 5 & 1 & 4 \\
- & & Avec & 19{,}6 & 115 & 5 & 1 & 9 \\
-\cmidrule{2-8}
-\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 44{,}4 & 120 & 0 & 4 & 4 \\
- & & Avec & 37{,}2 & 120 & 0 & \cellcolor{navylight}\textbf{1} & 9 \\
+\multirow{2}{*}{iris} & \multirow{2}{*}{2} & Sans & 0{,}6 & 0 & 115 & 5 & 1 & 4 / 3 \\
+ & & Avec & 1{,}8 & 0 & 115 & 5 & 1 & 9 / 3 \\
+\cmidrule{2-9}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 8{,}5 & 0 & 120 & 0 & 4 & 4 / 7 \\
+ & & Avec & 8{,}3 & 0 & 120 & 0 & \cellcolor{navylight}\textbf{3} & 9 / 7 \\
 \midrule
-\multirow{2}{*}{seeds} & \multirow{2}{*}{2} & Sans & 46{,}4 & 158 & 10 & 3 & 6 \\
- & & Avec & 21{,}0 & 158 & 10 & 3 & 11 \\
-\cmidrule{2-8}
-\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}2 & 161 & 7 & 2 & 6 \\
- & & Avec & 60{,}1 & 159 & 9 & 5 & 11 \\
+\multirow{2}{*}{seeds} & \multirow{2}{*}{2} & Sans & 6{,}2 & 0 & 158 & 10 & 2 & 6 / 3 \\
+ & & Avec & 7{,}7 & 0 & 158 & 10 & 2 & 11 / 3 \\
+\cmidrule{2-9}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 300{,}9 & 3{,}7 & 162 & 6 & 1 & 6 / 7 \\
+ & & Avec & 301{,}1 & 2{,}4 & 164 & 7 & 4 & 11 / 7 \\
 \midrule
-\multirow{2}{*}{wine} & \multirow{2}{*}{2} & Sans & 22{,}4 & 137 & 5 & 2 & 13 \\
- & & Avec & 21{,}3 & 140 & \cellcolor{navylight}\textbf{2} & 1 & 18 \\
-\cmidrule{2-8}
-\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}1 & 136 & 6 & 3 & 13 \\
- & & Avec & 46{,}0 & 142 & \cellcolor{navylight}\textbf{0} & \cellcolor{navylight}\textbf{1} & 18 \\
+\multirow{2}{*}{wine} & \multirow{2}{*}{2} & Sans & 8{,}3 & 0 & 137 & 5 & 2 & 13 / 3 \\
+ & & Avec & 8{,}5 & 0 & 140 & \cellcolor{navylight}\textbf{2} & \cellcolor{navylight}\textbf{1} & 18 / 3 \\
+\cmidrule{2-9}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 37{,}3 & 0 & 142 & 0 & 6 & 13 / 7 \\
+ & & Avec & 11{,}7 & 0 & 142 & 0 & \cellcolor{navylight}\textbf{4} & 18 / 7 \\
 \midrule
-\multirow{2}{*}{glass} & \multirow{2}{*}{2} & Sans & 60{,}1 & 115 & 56 & 16 & 9 \\
- & & Avec & 60{,}0 & 111 & 60 & 16 & 14 \\
-\cmidrule{2-8}
-\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}2 & 123 & 48 & 22 & 9 \\
- & & Avec & 60{,}1 & 114 & 57 & 16 & 14 \\
+\multirow{2}{*}{glass} & \multirow{2}{*}{2} & Sans & 45{,}5 & 0 & 115 & 56 & 16 & 9 / 3 \\
+ & & Avec & 48{,}2 & 0 & 116 & 55 & 16 & 14 / 3 \\
+\cmidrule{2-9}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 300{,}0 & 30{,}2 & 130 & 41 & 16 & 9 / 7 \\
+ & & Avec & 300{,}9 & 33{,}9 & 127 & 44 & 20 & 14 / 7 \\
 \midrule
-\multirow{2}{*}{ecoli} & \multirow{2}{*}{2} & Sans & 12{,}8 & 210 & 7 & 6 & 7 \\
- & & Avec & 43{,}7 & 210 & 7 & 6 & 12 \\
-\cmidrule{2-8}
-\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 60{,}1 & 206 & 11 & 8 & 7 \\
- & & Avec & 60{,}2 & 208 & 9 & 6 & 12 \\
+\multirow{2}{*}{ecoli} & \multirow{2}{*}{2} & Sans & 3{,}2 & 0 & 210 & 7 & 6 & 7 / 3 \\
+ & & Avec & 7{,}7 & 0 & 210 & 7 & 6 & 12 / 3 \\
+\cmidrule{2-9}
+\multirow{2}{*}{} & \multirow{2}{*}{3} & Sans & 300{,}1 & 0{,}9 & 214 & 3 & 5 & 7 / 7 \\
+ & & Avec & 301{,}4 & 1{,}9 & 213 & 4 & 6 & 12 / 7 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -473,29 +556,36 @@ Dataset & $D$ & Config & Temps (s) & Obj. & Err.\ train & Err.\ test & $n_{\text
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part3_errors_comparison.png}
+  \includegraphics[width=\textwidth]{figures/part3_errors_comparison.pdf}
   \caption{Erreurs test.}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part3_time_comparison.png}
+  \includegraphics[width=\textwidth]{figures/part3_time_comparison.pdf}
   \caption{Temps de résolution.}
 \end{subfigure}
 \caption{Comparaison sans vs avec features dérivées pour chaque dataset et profondeur.}
 \label{fig:part3}
 \end{figure}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{figures/part3_test_error_delta_features.pdf}
+\caption{Écart d'erreurs test (avec $-$ sans features dérivées), par jeu et profondeur (\texttt{part3\_results.csv}).}
+\label{fig:part3_delta}
+\end{figure}
+
 \subsection{Analyse}
 
 \begin{resultbox}[Observations clés -- Partie 3]
 \begin{itemize}
-  \item \textbf{Wine} bénéficie le plus des features dérivées : à $D{=}3$, les erreurs passent de 6 à 0 (train) et de 3 à 1 (test), avec un temps réduit de 60\,s à 46\,s. Les combinaisons algébriques (ratios, différences, produits) entre les 13 features originales permettent de mieux séparer les trois classes.
-  \item \textbf{Iris} à $D{=}3$ : les erreurs test passent de 4 à 1, montrant une meilleure généralisation grâce aux features dérivées.
-  \item \textbf{Seeds} à $D{=}3$ : les features ajoutées n'apportent pas de gain et augmentent même les erreurs (9 vs 7 train, 5 vs 2 test). Cela s'explique par le fait que les 6 features originales séparent déjà bien les classes ; ajouter des variables augmente l'espace de recherche sans bénéfice.
-  \item La \textbf{taille de l'arbre} (nombre de splits $= 2^D - 1$) est fixée par $D$ et reste identique. L'amélioration se traduit par de meilleures performances \emph{à taille d'arbre égale}.
-  \item Le \textbf{temps de résolution} est variable : parfois plus long (iris $D{=}2$ : plus de variables MIP), parfois plus court (wine $D{=}3$ : le problème est mieux structuré avec les features dérivées).
-  \item Sur \textbf{glass} et \textbf{ecoli}, l’ajout de features dérivées peut améliorer la séparation des classes (glass : 6 classes ; ecoli : 8 classes), avec un effet variable sur le temps selon la structure du problème.
+  \item \textbf{Wine} à $D{=}2$ : gain net sur l'entraînement (5 $\to$ 2 erreurs) et sur le test (2 $\to$ 1), à temps comparable. À $D{=}3$, objectif optimal 142 atteint plus vite avec dérivées (12\,s vs 37\,s) et erreurs test 6 $\to$ 4.
+  \item \textbf{Iris} à $D{=}3$ : légère amélioration du test (4 $\to$ 3) à objectif et temps comparables ($\sim$8\,s).
+  \item \textbf{Seeds} à $D{=}2$ : pas de différence de précision ; à $D{=}3$, les deux runs touchent la limite de temps avec gap MIP ; les dérivées dégradent alors le test (1 $\to$ 4 erreurs) malgré un objectif MIP légèrement différent --- le surdimensionnement de l'espace de recherche peut nuire sous contrainte de temps.
+  \item Le \textbf{nombre de splits} est imposé par $D$ ($2^D{-}1$) ; les gains viennent du choix de seuils / features dans un espace de colonnes enrichi.
+  \item \textbf{Glass} à $D{=}3$ : sans et avec dérivées atteignent la limite avec fort gap ; les dérivées n'améliorent pas ici le test (16 $\to$ 20 erreurs dans notre tirage).
+  \item \textbf{Ecoli} : à $D{=}2$ pas d'effet ; à $D{=}3$ sous limite de temps, légère dégradation (5 $\to$ 6 erreurs test) avec les dérivées.
 \end{itemize}
 \end{resultbox}
 
@@ -674,11 +764,11 @@ Trois modes sont implémentés :
 
 \subsection{Résultats expérimentaux}
 
-\paragraph{Protocole.} Cinq jeux (iris, seeds, wine, glass, ecoli) binarisés par seuil médian. Six configurations comparées : formulation standard (5.1), avec ES (5.2), borne alternative seule (5.3 alt\_replace), les deux (5.3 alt\_both), lazy callback (5.3 lazy), et la formulation~F classique sur données binarisées (référence). Profondeurs $D \in \{2,3\}$, limite 60\,s.
+\paragraph{Protocole.} Cinq jeux binarisés par seuil médian. Six configurations : 5.1 standard, 5.2 ES, 5.3 \texttt{alt\_replace}, 5.3 \texttt{alt\_both}, 5.3 \texttt{lazy}, formulation~F. Profondeurs $D \in \{2,3\}$. Valeurs : \texttt{part4\_results.csv} (même limite CPLEX que les autres parties ; résolution en général rapide).
 
 \begin{table}[H]
 \centering
-\caption{Partie 4 -- Résultats $D=2$ (données binarisées).}
+\caption{Partie 4 -- Résultats $D=2$ (données binarisées, \texttt{part4\_results.csv}).}
 \label{tab:part4d2}
 \small
 \begin{tabular}{@{}l l r r r r@{}}
@@ -686,51 +776,51 @@ Trois modes sont implémentés :
 Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test \\
 \midrule
 \multirow{6}{*}{iris}
- & Standard       & 0{,}11 & 0 & 24 & 5 \\
- & ES             & 0{,}08 & 0 & 24 & 5 \\
- & Alt.\ replace  & 0{,}08 & 0 & 24 & 5 \\
- & Alt.\ both     & 0{,}10 & 0 & 24 & 5 \\
- & Lazy           & 1{,}00 & 0 & 24 & 5 \\
- & \textit{Form.\ F} & 0{,}28 & 0 & 24 & 5 \\
+ & Standard       & 0{,}04 & 0 & 24 & 5 \\
+ & ES             & 0{,}04 & 0 & 24 & 5 \\
+ & Alt.\ replace  & 0{,}04 & 0 & 24 & 5 \\
+ & Alt.\ both     & 0{,}04 & 0 & 24 & 5 \\
+ & Lazy           & 0{,}51 & 0 & 24 & 5 \\
+ & \textit{Form.\ F} & 0{,}08 & 0 & 24 & 5 \\
 \midrule
 \multirow{6}{*}{seeds}
- & Standard       & 0{,}12 & 0 & 25 & 12 \\
- & ES             & 0{,}25 & 0 & 25 & 12 \\
- & Alt.\ replace  & 0{,}22 & 0 & 25 & 12 \\
- & Alt.\ both     & 0{,}27 & 0 & 25 & 12 \\
- & Lazy           & 0{,}09 & 0 & 25 & 12 \\
- & \textit{Form.\ F} & 0{,}88 & 0 & 25 & 12 \\
+ & Standard       & 0{,}06 & 0 & 25 & 12 \\
+ & ES             & 0{,}10 & 0 & 25 & 12 \\
+ & Alt.\ replace  & 0{,}05 & 0 & 25 & 12 \\
+ & Alt.\ both     & 0{,}07 & 0 & 25 & 12 \\
+ & Lazy           & 0{,}04 & 0 & 25 & 12 \\
+ & \textit{Form.\ F} & 0{,}48 & 0 & 25 & 12 \\
 \midrule
 \multirow{6}{*}{wine}
- & Standard       & 0{,}28 & 0 & 11 & 2 \\
- & ES             & 2{,}44 & 0 & 11 & 2 \\
- & Alt.\ replace  & 0{,}31 & 0 & 11 & 2 \\
- & Alt.\ both     & 0{,}31 & 0 & 11 & 2 \\
- & Lazy           & 0{,}22 & 0 & 11 & 2 \\
- & \textit{Form.\ F} & 1{,}49 & 0 & 11 & 2 \\
+ & Standard       & 0{,}12 & 0 & 11 & 2 \\
+ & ES             & 22{,}53 & 0 & 11 & 2 \\
+ & Alt.\ replace  & 0{,}15 & 0 & 11 & 2 \\
+ & Alt.\ both     & 0{,}23 & 0 & 11 & 2 \\
+ & Lazy           & 0{,}12 & 0 & 11 & 2 \\
+ & \textit{Form.\ F} & 0{,}65 & 0 & 11 & 2 \\
 \midrule
 \multirow{6}{*}{glass}
- & Standard       & 0{,}92 & 0 & 73 & 21 \\
- & ES             & 2{,}61 & 0 & 73 & 21 \\
- & Alt.\ replace  & 0{,}78 & 0 & 73 & 21 \\
- & Alt.\ both     & 1{,}08 & 0 & 73 & 21 \\
- & Lazy           & 0{,}99 & 0 & 73 & 21 \\
- & \textit{Form.\ F} & 4{,}10 & 0 & 73 & 21 \\
+ & Standard       & 0{,}25 & 0 & 73 & 21 \\
+ & ES             & 0{,}71 & 0 & 73 & 21 \\
+ & Alt.\ replace  & 0{,}34 & 0 & 73 & 21 \\
+ & Alt.\ both     & 0{,}26 & 0 & 73 & 21 \\
+ & Lazy           & 0{,}47 & 0 & 73 & 21 \\
+ & \textit{Form.\ F} & 1{,}72 & 0 & 73 & 21 \\
 \midrule
 \multirow{6}{*}{ecoli}
- & Standard       & 0{,}17 & 0 & 46 & 10 \\
- & ES             & 0{,}31 & 0 & 46 & 10 \\
- & Alt.\ replace  & 0{,}31 & 0 & 46 & 10 \\
- & Alt.\ both     & 0{,}36 & 0 & 46 & 10 \\
- & Lazy           & 0{,}23 & 0 & 46 & 10 \\
- & \textit{Form.\ F} & 1{,}53 & 0 & 46 & 10 \\
+ & Standard       & 0{,}10 & 0 & 46 & 10 \\
+ & ES             & 0{,}12 & 0 & 46 & 10 \\
+ & Alt.\ replace  & 0{,}10 & 0 & 46 & 10 \\
+ & Alt.\ both     & 0{,}13 & 0 & 46 & 10 \\
+ & Lazy           & 0{,}12 & 0 & 46 & 10 \\
+ & \textit{Form.\ F} & 0{,}56 & 0 & 46 & 10 \\
 \bottomrule
 \end{tabular}
 \end{table}
 
 \begin{table}[H]
 \centering
-\caption{Partie 4 -- Résultats $D=3$ (données binarisées).}
+\caption{Partie 4 -- Résultats $D=3$ (données binarisées, \texttt{part4\_results.csv}).}
 \label{tab:part4d3}
 \small
 \begin{tabular}{@{}l l r r r r@{}}
@@ -738,44 +828,44 @@ Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test \\
 Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test \\
 \midrule
 \multirow{6}{*}{iris}
- & Standard       & 0{,}16 & 0 & 24 & 13 \\
- & ES             & 0{,}26 & 0 & 24 & 14 \\
- & Alt.\ replace  & 0{,}23 & 0 & 24 & 12 \\
- & Alt.\ both     & 0{,}27 & 0 & 24 & \cellcolor{navylight}\textbf{5} \\
- & Lazy           & 0{,}17 & 0 & 24 & 14 \\
- & \textit{Form.\ F} & 1{,}39 & 0 & 24 & 14 \\
+ & Standard       & 0{,}07 & 0 & 24 & 13 \\
+ & ES             & 0{,}12 & 0 & 24 & 14 \\
+ & Alt.\ replace  & 0{,}12 & 0 & 24 & 14 \\
+ & Alt.\ both     & 0{,}17 & 0 & 24 & 13 \\
+ & Lazy           & 0{,}10 & 0 & 24 & 14 \\
+ & \textit{Form.\ F} & 0{,}72 & 0 & 24 & 14 \\
 \midrule
 \multirow{6}{*}{seeds}
- & Standard       & 0{,}53 & 0 & 21 & 14 \\
- & ES             & 1{,}33 & 0 & 21 & 14 \\
- & Alt.\ replace  & 0{,}74 & 0 & 21 & 14 \\
- & Alt.\ both     & 1{,}04 & 0 & 21 & 14 \\
- & Lazy           & 1{,}83 & 0 & 21 & 14 \\
- & \textit{Form.\ F} & 8{,}16 & 0 & 21 & 14 \\
+ & Standard       & 0{,}22 & 0 & 21 & 14 \\
+ & ES             & 0{,}47 & 0 & 21 & 14 \\
+ & Alt.\ replace  & 0{,}28 & 0 & 21 & 14 \\
+ & Alt.\ both     & 0{,}34 & 0 & 21 & 14 \\
+ & Lazy           & 1{,}43 & 0 & 21 & 14 \\
+ & \textit{Form.\ F} & 2{,}29 & 0 & 21 & 14 \\
 \midrule
 \multirow{6}{*}{wine}
- & Standard       & 4{,}05 & 0 & 7 & 1 \\
- & ES             & 60{,}1 & 4{,}8 & 7 & 1 \\
- & Alt.\ replace  & 4{,}69 & 0 & 7 & 1 \\
- & Alt.\ both     & 6{,}09 & 0 & 7 & 1 \\
- & Lazy           & 11{,}8 & 0 & 7 & 1 \\
- & \textit{Form.\ F} & 60{,}1 & 5{,}6 & 8 & 3 \\
+ & Standard       & 1{,}28 & 0 & 7 & 1 \\
+ & ES             & 60{,}83 & 0 & 7 & 1 \\
+ & Alt.\ replace  & 1{,}48 & 0 & 7 & 2 \\
+ & Alt.\ both     & 2{,}36 & 0 & 7 & 1 \\
+ & Lazy           & 9{,}25 & 0 & 7 & 1 \\
+ & \textit{Form.\ F} & 53{,}80 & 0 & 7 & 1 \\
 \midrule
 \multirow{6}{*}{glass}
- & Standard       & 36{,}5 & 0 & 56 & 20 \\
- & ES             & 60{,}1 & 30{,}8 & 57 & 19 \\
- & Alt.\ replace  & 24{,}4 & 0 & 56 & 21 \\
- & Alt.\ both     & 30{,}0 & 0 & 56 & 20 \\
- & Lazy           & 60{,}0 & 36{,}5 & 58 & 20 \\
- & \textit{Form.\ F} & 60{,}1 & 23{,}0 & 57 & 20 \\
+ & Standard       & 7{,}63 & 0 & 56 & 20 \\
+ & ES             & 48{,}49 & 0 & 56 & 21 \\
+ & Alt.\ replace  & 5{,}59 & 0 & 56 & 21 \\
+ & Alt.\ both     & 7{,}32 & 0 & 56 & 20 \\
+ & Lazy           & 111{,}35 & 0 & 56 & 20 \\
+ & \textit{Form.\ F} & 36{,}87 & 0 & 56 & 20 \\
 \midrule
 \multirow{6}{*}{ecoli}
- & Standard       & 1{,}72 & 0 & 39 & 11 \\
- & ES             & 13{,}0 & 0 & 39 & 11 \\
- & Alt.\ replace  & 2{,}04 & 0 & 39 & 10 \\
- & Alt.\ both     & 2{,}71 & 0 & 39 & 11 \\
- & Lazy           & 19{,}0 & 0 & 39 & 10 \\
- & \textit{Form.\ F} & 12{,}8 & 0 & 39 & 11 \\
+ & Standard       & 0{,}59 & 0 & 39 & 10 \\
+ & ES             & 4{,}34 & 0 & 39 & 10 \\
+ & Alt.\ replace  & 0{,}74 & 0 & 39 & 11 \\
+ & Alt.\ both     & 0{,}82 & 0 & 39 & 11 \\
+ & Lazy           & 6{,}91 & 0 & 39 & 11 \\
+ & \textit{Form.\ F} & 5{,}09 & 0 & 39 & 11 \\
 \bottomrule
 \end{tabular}
 \end{table}
@@ -784,29 +874,36 @@ Dataset & Configuration & Temps (s) & Gap (\%) & Err.\ train & Err.\ test \\
 \centering
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part4_time_by_config.png}
+  \includegraphics[width=\textwidth]{figures/part4_time_by_config.pdf}
   \caption{Temps par configuration ($D{=}3$).}
 \end{subfigure}
 \hfill
 \begin{subfigure}[t]{0.48\textwidth}
   \centering
-  \includegraphics[width=\textwidth]{figures/part4_speedup.png}
+  \includegraphics[width=\textwidth]{figures/part4_speedup.pdf}
   \caption{Ratio temps Form.~F / Standard.}
 \end{subfigure}
 \caption{Performance de la formulation binaire comparée à la formulation~F.}
 \label{fig:part4}
 \end{figure}
 
+\begin{figure}[H]
+\centering
+\includegraphics[width=0.72\textwidth]{figures/part4_err_test_by_config_D3.pdf}
+\caption{Figure complémentaire Partie~4 : erreurs test par configuration ($D{=}3$).}
+\label{fig:part4_enriched}
+\end{figure}
+
 \subsection{Analyse}
 
 \begin{resultbox}[Observations clés -- Partie 4]
 \begin{itemize}
-  \item \textbf{Formulation binaire vs formulation~F.} La formulation binaire est nettement plus rapide sur tous les jeux binarisés. Le gain est spectaculaire sur wine à $D{=}3$ : $\sim$4\,s contre 60\,s (time limit, gap 5{,}6\,\%). La structure compacte (variables $b_{nf}$, $w_{nk}$, $\theta_i$) se prête mieux à la résolution que les variables de flot de la formulation~F.
-  \item \textbf{Renforcement ES (5.2).} L'ajout des contraintes ES ne modifie pas la précision (même optimal) mais \emph{augmente} le temps : pour wine $D{=}3$, on passe de 4\,s à 60\,s (time limit). Le grand nombre de variables $\beta$ ajoutées pénalise la résolution. L'utilité est surtout théorique (resserrement de la relaxation LP).
-  \item \textbf{Borne alternative (5.3).} Le mode \texttt{alt\_both} (ajout de (5) en complément de (2d)+(2e)) guide le solveur vers des arbres de meilleure qualité test sur iris $D{=}3$ : \textbf{5 erreurs test} contre 13--14 pour les autres configurations. Cet effet est dû au resserrement de la relaxation LP qui favorise un arbre mieux généralisable parmi les solutions optimales en entraînement.
-  \item \textbf{Lazy callback.} Donne les mêmes résultats en précision que la formulation standard mais avec un surcoût dû au mécanisme de callback (vérification à chaque nœud entier). Wine $D{=}3$ : 11{,}8\,s vs 4\,s.
-  \item \textbf{Impact de la binarisation.} La binarisation par seuil médian perd de l'information : iris passe de 5 erreurs train (données continues, Partie~1) à 24 erreurs (données binarisées). Cette dégradation est intrinsèque à la discrétisation, pas à la formulation.
-  \item Sur \textbf{glass} et \textbf{ecoli}, la formulation binaire reste plus rapide que la formulation~F sur données binarisées ; le renforcement ES et le mode \texttt{alt\_both} ont un impact similaire à celui observé sur les trois jeux de base.
+  \item \textbf{Formulation binaire vs formulation~F.} La variante 5.1 reste en général beaucoup plus rapide que la formulation~F sur les mêmes données binarisées. Exemple marquant : \textbf{wine} à $D{=}3$, $\sim$1{,}3\,s (standard) pour 53\,s (F), avec les mêmes erreurs train/test dans notre tirage.
+  \item \textbf{Renforcement ES (5.2).} Ne change pas l'optimum entraînement/test sur la plupart des cas mais peut fortement augmenter le temps (wine $D{=}3$ : $\sim$1{,}3\,s $\to$ $\sim$61\,s) du fait du volume de variables et contraintes supplémentaires.
+  \item \textbf{Borne alternative (5.3).} Sur \textbf{iris} $D{=}3$, le standard et \texttt{alt\_both} affichent \textbf{13 erreurs test}, légèrement mieux que ES, \texttt{alt\_replace}, lazy et F (14 dans \texttt{part4\_results.csv}). Sur \textbf{ecoli} $D{=}3$, seuls le standard et ES restent à 10 erreurs test ; \texttt{alt\_replace}, \texttt{alt\_both}, lazy et la formulation~F montent à 11 : de légers écarts selon la formulation malgré un même objectif d'entraînement cible.
+  \item \textbf{Lazy callback.} Précision identique au standard sur nos instances, mais coût variable (ex.\ wine $D{=}3$ : 9\,s vs 1{,}3\,s ; glass $D{=}3$ : lazy plus lent que le standard).
+  \item \textbf{Impact de la binarisation.} Comme en Partie~1, la discrétisation médiane dégrade fortement le fit (ex.\ iris : 24 erreurs train sur données binaires vs 5 en continu) : c'est une limite du pré-traitement, pas de la seule formulation MIP.
+  \item \textbf{Glass} $D{=}3$ : formulation~F reste plus lente que le standard ; ES et lazy peuvent être pénalisants en temps pour un gain de précision nul ou ambigu sur ce jeu.
 \end{itemize}
 \end{resultbox}
 
@@ -823,11 +920,11 @@ Ce projet a permis d'explorer quatre directions complémentaires pour enrichir l
 \begin{enumerate}
   \item \textbf{Égalités valides} : les linked sets et opposite box corners permettent de resserrer la relaxation LP et de réduire le nombre de nœuds B\&B, en particulier sur iris (jusqu'à $-40$\,\% de nœuds). L'arrondi des features augmente le nombre d'égalités détectables mais peut dégrader marginalement la qualité de la solution.
 
-  \item \textbf{Équité} : le compromis équité--précision est confirmé expérimentalement. La contrainte stricte assure un parity gap nul au prix d'une forte dégradation de la précision. La tolérance $\varepsilon{=}0{,}15$ offre le meilleur compromis en pratique, surtout quand le gap initial est élevé.
+  \item \textbf{Équité} : le compromis équité--précision est confirmé sur \texttt{part2\_results.csv}. La contrainte stricte impose un parity gap nul au prix d'une forte dégradation de la précision ; à $D{=}3$, les limites de temps et gaps MIP résiduels doivent être pris en compte pour interpréter les métriques. La tolérance $\varepsilon{=}0{,}15$ reste en pratique un bon compromis lorsque le déséquilibre initial est marqué.
 
-  \item \textbf{Features dérivées} : l'ajout de combinaisons algébriques sélectionnées par gain de Gini améliore significativement la classification sur wine (erreurs test $3 \to 1$ à $D{=}3$) et iris (erreurs test $4 \to 1$), mais peut dégrader les performances sur des jeux déjà bien séparés (seeds).
+  \item \textbf{Features dérivées} : sélection par gain de Gini améliore nettement \textbf{wine} à $D{=}2$ (précision train/test) et à $D{=}3$ (test $6 \to 4$, temps réduit) ; gain marginal sur \textbf{iris} $D{=}3$ (test $4 \to 3$). Sous limite de temps et fort gap MIP, \textbf{seeds} et \textbf{glass} en $D{=}3$ montrent que l'enrichissement peut dégrader le test.
 
-  \item \textbf{Formulation binaire} : la formulation spécialisée est $5\times$ à $15\times$ plus rapide que la formulation~F sur données binarisées (iris, seeds, wine). Sur les cinq jeux (avec glass et ecoli), les mêmes tendances s'observent. Le renforcement par ES augmente le temps sans gain pratique. La borne alternative \texttt{alt\_both} peut améliorer la qualité de généralisation en guidant le solveur vers de meilleurs optima parmi les solutions équivalentes en entraînement.
+  \item \textbf{Formulation binaire} : la formulation 5.1 reste typiquement bien plus rapide que la formulation~F sur données binarisées (écarts d'ordre de grandeur sur wine $D{=}3$). ES alourdit souvent la résolution. Les variantes 5.3 modulent parfois légèrement les erreurs test (iris, ecoli) sans effet miracle systématique sur l'échantillon courant.
 \end{enumerate}
 
 \paragraph{Jeux de données.} Conformément au sujet, les expériences portent sur les trois jeux fournis (\texttt{iris}, \texttt{seeds}, \texttt{wine}) et sur deux jeux supplémentaires au choix~: \texttt{glass} (classification de types de verre, UCI, 9~features, 6~classes) et \texttt{ecoli} (localisation de protéines, UCI, 7~features, 8~classes), cohérents avec le cadre du projet (classification supervisée, features numériques, arbres de décision optimaux).
